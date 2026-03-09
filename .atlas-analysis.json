@@ -1,0 +1,118 @@
+{
+  "projectType": "saas",
+  "projectName": "Trippins",
+  "projectDescription": "A hotel and accommodation booking platform with user authentication, reservations, reviews, and admin management.",
+  "theme": "almond",
+  "primaryColor": "#e78920",
+  "lightColor": "#752470",
+  "darkColor": null,
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "User Guides",
+            "pages": [
+              "guides/authentication",
+              "guides/browsing-housing",
+              "guides/making-reservations",
+              "guides/writing-reviews",
+              "guides/user-roles"
+            ]
+          },
+          {
+            "group": "Admin Features",
+            "pages": [
+              "admin/managing-housing",
+              "admin/managing-reservations",
+              "admin/moderating-content"
+            ]
+          },
+          {
+            "group": "Frontend",
+            "pages": [
+              "frontend/overview",
+              "frontend/components",
+              "frontend/routing",
+              "frontend/services"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/introduction",
+              "api/authentication"
+            ]
+          },
+          {
+            "group": "Endpoints",
+            "pages": [
+              "api/users",
+              "api/housing",
+              "api/reservations",
+              "api/reviews",
+              "api/search"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Deployment",
+        "groups": [
+          {
+            "group": "Setup",
+            "pages": [
+              "deployment/docker",
+              "deployment/configuration",
+              "deployment/database"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "JWT Authentication & Authorization",
+    "Hotel/Accommodation Browsing & Search",
+    "Reservation Management System",
+    "User Reviews & Ratings",
+    "Admin Panel for Content Moderation",
+    "Advanced Tag-based Search",
+    "Email Notifications",
+    "Multi-role User System (Anonymous, Registered, Admin)"
+  ],
+  "publicApiSurface": [
+    "POST /v1/api/auth/login",
+    "POST /v1/api/auth/logout",
+    "POST /v1/api/auth/refresh",
+    "GET /v1/api/houses",
+    "GET /v1/api/houses/{id}",
+    "POST /v1/api/houses",
+    "PUT /v1/api/houses/{id}",
+    "DELETE /v1/api/houses/{id}",
+    "GET /v1/api/reservations",
+    "POST /v1/api/reservations",
+    "PUT /v1/api/reservations/{id}",
+    "DELETE /v1/api/reservations/{id}",
+    "GET /v1/api/reviews",
+    "POST /v1/api/reviews",
+    "GET /v1/api/users/{id}",
+    "PUT /v1/api/users/{id}",
+    "POST /v1/api/users",
+    "GET /v1/api/search/houses"
+  ]
+}
