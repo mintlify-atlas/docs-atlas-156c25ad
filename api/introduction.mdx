@@ -1,0 +1,299 @@
+---
+title: 'API Reference Overview'
+description: 'Complete guide to the Trippins REST API for hotel booking operations'
+---
+
+## Welcome to Trippins API
+
+The Trippins API is a REST-based service that powers the hotel booking platform. It provides programmatic access to manage users, houses, reservations, reviews, and all core booking operations.
+
+## Base URL and Versioning
+
+All API requests are made to the following base URL:
+
+```
+https://localhost:8443
+```
+
+The API uses URL path versioning. All endpoints are prefixed with `/v1/api`:
+
+```
+https://localhost:8443/v1/api/{resource}
+```
+
+### Example Endpoints
+
+- `https://localhost:8443/v1/api/houses` - List all houses
+- `https://localhost:8443/v1/api/users` - Manage users
+- `https://localhost:8443/v1/api/reservations` - Handle reservations
+
+## API Architecture
+
+The Trippins API follows RESTful principles with resource-based URLs and standard HTTP methods:
+
+| Method | Description |
+|--------|-------------|
+| `GET` | Retrieve resources |
+| `POST` | Create new resources |
+| `PUT` | Update existing resources |
+| `DELETE` | Remove resources |
+
+## Resource Categories
+
+The API is organized into the following resource groups:
+
+<CardGroup cols={2}>
+  <Card title="User Management" icon="user">
+    Create, read, update, and delete user accounts
+  </Card>
+  <Card title="Housing Management" icon="house">
+    Manage hotel listings, tags, and properties
+  </Card>
+  <Card title="Reservation Management" icon="calendar-check">
+    Handle booking operations and availability
+  </Card>
+  <Card title="Review Management" icon="star">
+    Manage customer reviews and ratings
+  </Card>
+  <Card title="Authentication" icon="lock">
+    JWT-based authentication and authorization
+  </Card>
+  <Card title="Advanced Search" icon="magnifying-glass">
+    Query houses by tags and star ratings
+  </Card>
+</CardGroup>
+
+## Response Format
+
+All API responses return JSON-formatted data with consistent structure.
+
+### Success Response
+
+Successful requests return the appropriate HTTP status code and JSON payload:
+
+```json
+{
+  "code": 1,
+  "name": "Beachfront Villa",
+  "location": "Malibu, CA",
+  "price": 350,
+  "stars": 5,
+  "description": "Luxurious villa with ocean views",
+  "acepted": true,
+  "tags": [
+    {"id": "beach"},
+    {"id": "wifi"}
+  ]
+}
+```
+
+### Common HTTP Status Codes
+
+<ResponseField name="200 OK" type="success">
+  The request succeeded. Response includes the requested data.
+</ResponseField>
+
+<ResponseField name="201 Created" type="success">
+  A new resource was successfully created.
+</ResponseField>
+
+<ResponseField name="204 No Content" type="success">
+  The request succeeded but there's no content to return (typically for DELETE operations).
+</ResponseField>
+
+<ResponseField name="400 Bad Request" type="error">
+  The request was malformed or contains invalid parameters.
+</ResponseField>
+
+<ResponseField name="401 Unauthorized" type="error">
+  Authentication is required or credentials are invalid.
+</ResponseField>
+
+<ResponseField name="403 Forbidden" type="error">
+  The authenticated user doesn't have permission to access this resource.
+</ResponseField>
+
+<ResponseField name="404 Not Found" type="error">
+  The requested resource doesn't exist.
+</ResponseField>
+
+<ResponseField name="500 Internal Server Error" type="error">
+  An unexpected error occurred on the server.
+</ResponseField>
+
+## Error Handling
+
+When an error occurs, the API returns a structured error response:
+
+### Error Response Format
+
+```json
+{
+  "error": "Unauthorized",
+  "message": "Bad credentials"
+}
+```
+
+### Error Response with Problem Details
+
+For some endpoints, detailed error information follows RFC 7807 Problem Details:
+
+```json
+{
+  "type": "https://localhost:8443/errors/validation",
+  "title": "Validation Error",
+  "status": 400,
+  "detail": "Invalid input provided",
+  "instance": "/v1/api/users"
+}
+```
+
+<ParamField path="type" type="string">
+  A URI reference identifying the problem type
+</ParamField>
+
+<ParamField path="title" type="string">
+  A short, human-readable summary of the problem
+</ParamField>
+
+<ParamField path="status" type="integer">
+  The HTTP status code
+</ParamField>
+
+<ParamField path="detail" type="string">
+  A detailed explanation of the problem
+</ParamField>
+
+<ParamField path="instance" type="string">
+  The URI reference of the specific occurrence
+</ParamField>
+
+## Authentication Overview
+
+Most API endpoints require authentication using JWT (JSON Web Tokens). See the [Authentication](/api/authentication) page for complete details on:
+
+- Logging in to obtain a JWT token
+- Including the token in API requests
+- Token expiration and renewal
+- Role-based access control
+
+### Quick Authentication Example
+
+```bash
+# 1. Login to get JWT token
+curl -X POST https://localhost:8443/v1/api/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "user@example.com",
+    "password": "password123"
+  }'
+
+# 2. Use token in subsequent requests
+curl https://localhost:8443/v1/api/houses \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+## Rate Limiting
+
+<Note>
+Currently, the Trippins API does not implement rate limiting. However, clients should implement reasonable request throttling to avoid overloading the server.
+</Note>
+
+Best practices:
+- Avoid making excessive concurrent requests
+- Implement exponential backoff for retries
+- Cache responses when appropriate
+
+## Pagination
+
+Certain endpoints support pagination for large result sets:
+
+### Pagination Parameters
+
+<ParamField query="page" type="integer" default="0">
+  Zero-based page number
+</ParamField>
+
+<ParamField query="size" type="integer" default="6">
+  Number of items per page
+</ParamField>
+
+### Pagination Example
+
+```bash
+GET /v1/api/rooms/extra?page=0&size=6
+```
+
+### Pagination Response
+
+```json
+{
+  "content": [...],
+  "totalPages": 10,
+  "totalElements": 58,
+  "size": 6,
+  "number": 0,
+  "first": true,
+  "last": false,
+  "numberOfElements": 6,
+  "empty": false
+}
+```
+
+<ResponseField name="content" type="array">
+  The array of items for the current page
+</ResponseField>
+
+<ResponseField name="totalPages" type="integer">
+  Total number of pages available
+</ResponseField>
+
+<ResponseField name="totalElements" type="integer">
+  Total number of items across all pages
+</ResponseField>
+
+<ResponseField name="number" type="integer">
+  Current page number (zero-based)
+</ResponseField>
+
+<ResponseField name="first" type="boolean">
+  Whether this is the first page
+</ResponseField>
+
+<ResponseField name="last" type="boolean">
+  Whether this is the last page
+</ResponseField>
+
+## Content Types
+
+The API accepts and returns JSON data. Always include the appropriate headers:
+
+```bash
+Content-Type: application/json
+Accept: application/json
+```
+
+### Image Endpoints
+
+Housing image endpoints work with binary image data:
+
+```bash
+# Upload image
+Content-Type: application/json
+
+# Retrieve image
+Accept: image/jpeg
+```
+
+## Getting Started
+
+To begin using the Trippins API:
+
+1. **Authenticate**: Obtain a JWT token via the `/v1/api/login` endpoint
+2. **Include Token**: Add the token to the `Authorization` header of all requests
+3. **Make Requests**: Use standard HTTP methods to interact with resources
+4. **Handle Responses**: Process JSON responses and handle errors appropriately
+
+<Card title="Next: Authentication" icon="arrow-right" href="/api/authentication">
+  Learn how to authenticate with JWT tokens
+</Card>

@@ -1,0 +1,346 @@
+---
+title: Frontend Overview
+description: Angular 17 frontend architecture and setup for the Trippins hotel booking platform
+---
+
+## Introduction
+
+The Trippins frontend is built with **Angular 17**, providing a modern single-page application (SPA) for hotel booking and management. The application uses TypeScript, reactive forms, and RxJS for state management and asynchronous operations.
+
+<CardGroup cols={2}>
+  <Card title="Components" icon="puzzle-piece" href="/frontend/components">
+    View component architecture
+  </Card>
+  <Card title="Services" icon="server" href="/frontend/services">
+    Explore Angular services
+  </Card>
+  <Card title="Routing" icon="route" href="/frontend/routing">
+    Learn about routing configuration
+  </Card>
+  <Card title="Backend API" icon="database" href="/backend/overview">
+    API documentation
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+<AccordionGroup>
+  <Accordion title="Core Framework">
+    - **Angular**: 17.0.0
+    - **TypeScript**: 5.2.2
+    - **RxJS**: 7.8.0
+    - **Zone.js**: 0.14.2
+  </Accordion>
+
+  <Accordion title="UI & Styling">
+    - **Bootstrap**: 5.3.5
+    - **Bootstrap Icons**: 1.11.3
+    - **Font Awesome**: 4.7.0 & 6.7.2
+    - **Animate.css**: 4.1.1
+    - **Owl Carousel**: 2.3.4
+  </Accordion>
+
+  <Accordion title="Authentication & HTTP">
+    - **@auth0/angular-jwt**: 5.2.0
+    - **HttpClient**: Built-in Angular module
+    - JWT-based authentication
+    - HTTP interceptors for token injection
+  </Accordion>
+
+  <Accordion title="Additional Libraries">
+    - **SweetAlert2**: 11.19.1 (modals & alerts)
+    - **jQuery**: 3.7.1 (legacy components)
+    - **WOW.js**: 1.2.2 (scroll animations)
+    - **CounterUp2**: 2.0.2 (number animations)
+  </Accordion>
+</AccordionGroup>
+
+## Project Structure
+
+The frontend follows Angular's standard project structure with feature-based organization:
+
+```plaintext
+src/
+├── app/
+│   ├── components/          # Feature components
+│   │   ├── about/          # About page
+│   │   ├── admin/          # Admin panel with sub-components
+│   │   │   ├── housing-panel/
+│   │   │   └── reservation-panel/
+│   │   ├── error/          # Error page
+│   │   ├── footer/         # Footer component
+│   │   ├── header/         # Header/navigation
+│   │   ├── index/          # Landing page
+│   │   ├── login/          # Login form
+│   │   ├── newhotel/       # Hotel creation
+│   │   ├── profile/        # User profile
+│   │   ├── register/       # Registration form
+│   │   ├── room/           # Room listing
+│   │   ├── room-details/   # Individual room
+│   │   └── testimonials/   # Reviews display
+│   ├── services/           # Business logic
+│   │   ├── auth.service.ts
+│   │   ├── housing-service.service.ts
+│   │   ├── layout.service.ts
+│   │   ├── reservation-service.service.ts
+│   │   ├── review-service.service.ts
+│   │   └── user-service.service.ts
+│   ├── guards/             # Route protection
+│   │   ├── auth.guard.ts
+│   │   └── role.guard.ts
+│   ├── interceptors/       # HTTP interceptors
+│   │   └── auth.interceptor.ts
+│   ├── models/             # TypeScript interfaces
+│   │   └── DTOS/
+│   │       ├── housing-dto.ts
+│   │       ├── reservation-dto.ts
+│   │       ├── review-dto.ts
+│   │       └── user-dto.ts
+│   ├── app-routing.module.ts
+│   ├── app.component.ts
+│   └── app.module.ts
+├── assets/                 # Static files
+├── environments/           # Environment configs
+└── styles.css             # Global styles
+```
+
+## Application Module
+
+The root module declares all components and configures providers:
+
+```typescript src/app/app.module.ts
+import { NgModule } from '@angular/core';
+import { BrowserModule } from '@angular/platform-browser';
+import { AppRoutingModule } from './app-routing.module';
+import { AppComponent } from './app.component';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
+import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
+import { AuthInterceptor } from './interceptors/auth.interceptor';
+
+@NgModule({
+  declarations: [
+    AppComponent,
+    AboutComponent,
+    HeaderComponent,
+    FooterComponent,
+    IndexComponent,
+    RoomComponent,
+    AdminComponent,
+    ErrorComponent,
+    LoginComponent,
+    NewhotelComponent,
+    ProfileComponent,
+    RegisterComponent,
+    RoomDetailsComponent,
+    ReservationPanelComponent,
+    HousingPanelComponent,
+    TestimonialsComponent
+  ],
+  imports: [
+    BrowserModule,
+    AppRoutingModule,
+    ReactiveFormsModule,
+    HttpClientModule,
+    FormsModule
+  ],
+  providers: [
+    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }
+  ],
+  bootstrap: [AppComponent]
+})
+export class AppModule { }
+```
+
+<Note>
+The `AuthInterceptor` is registered globally to automatically attach JWT tokens to all HTTP requests.
+</Note>
+
+## Root Component
+
+The app component initializes layout services on startup:
+
+```typescript src/app/app.component.ts
+import { Component, OnInit } from '@angular/core';
+import { LayoutService } from './services/layout.service';
+
+@Component({
+  selector: 'app-root',
+  templateUrl: './app.component.html',
+  styleUrl: './app.component.css',
+  standalone: false
+})
+export class AppComponent implements OnInit {
+  title = 'TrippinsApp';
+
+  constructor(private layoutService: LayoutService) {}
+
+  ngOnInit() {
+    this.layoutService.initializeDropdownHover();
+    this.layoutService.initializeVideoModal();
+    this.layoutService.checkLoggedInCookie();
+  }
+}
+```
+
+## Environment Configuration
+
+The application uses environment files for configuration:
+
+```typescript src/environments/environment.development.ts
+export const environment = {
+  baseUrl: '/',
+  baseUrlApi: '/v1/api'
+};
+```
+
+<Info>
+API requests are proxied through `/v1/api` to avoid CORS issues during development. See `proxy.conf.json` for proxy configuration.
+</Info>
+
+## Key Features
+
+### Authentication Flow
+
+<Steps>
+  <Step title="User Login">
+    User submits credentials via the login form
+  </Step>
+  <Step title="JWT Token">
+    Backend returns JWT token and user roles
+  </Step>
+  <Step title="Token Storage">
+    AuthService stores token and roles in localStorage
+  </Step>
+  <Step title="Auto-injection">
+    AuthInterceptor attaches token to all subsequent requests
+  </Step>
+  <Step title="Route Protection">
+    Guards verify authentication and authorization before route activation
+  </Step>
+</Steps>
+
+### Data Flow Pattern
+
+The application follows a consistent data flow pattern:
+
+<CodeGroup>
+
+```typescript Component
+// Component requests data from service
+export class RoomComponent implements OnInit {
+  houses: any[] = [];
+  
+  constructor(private houseService: HousingServiceService) {}
+
+  ngOnInit(): void {
+    this.loadHouses();
+  }
+
+  loadHouses(): void {
+    this.houseService.getRooms(this.currentPage, this.pageSize)
+      .subscribe({
+        next: (response) => {
+          this.houses = [...this.houses, ...response.content];
+        },
+        error: (err) => {
+          console.error('Error loading houses:', err);
+        }
+      });
+  }
+}
+```
+
+```typescript Service
+// Service makes HTTP request to backend
+@Injectable({ providedIn: 'root' })
+export class HousingServiceService {
+  constructor(private http: HttpClient) {}
+
+  getRooms(page: number, size: number): Observable<PagedResponse<HousingDTO>> {
+    return this.http.get<PagedResponse<HousingDTO>>(
+      `${environment.baseUrlApi}/rooms/extra?page=${page}&size=6`
+    );
+  }
+}
+```
+
+```typescript Interceptor
+// Interceptor adds JWT token
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+  constructor(private authService: AuthService) {}
+
+  intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    const token = this.authService.getJwt();
+    if (token) {
+      request = request.clone({
+        setHeaders: { Authorization: `Bearer ${token}` }
+      });
+    }
+    return next.handle(request);
+  }
+}
+```
+
+</CodeGroup>
+
+## Development Setup
+
+<Steps>
+  <Step title="Install Dependencies">
+    ```bash
+    cd frontend
+    npm install
+    ```
+  </Step>
+  
+  <Step title="Start Development Server">
+    ```bash
+    ng serve
+    ```
+    Application runs at `http://localhost:4200`
+  </Step>
+  
+  <Step title="Build for Production">
+    ```bash
+    ng build --configuration production
+    ```
+    Output directory: `dist/trippins-app`
+  </Step>
+  
+  <Step title="Run Tests">
+    ```bash
+    ng test
+    ```
+  </Step>
+</Steps>
+
+## Package Scripts
+
+| Script | Command | Description |
+|--------|---------|-------------|
+| `start` | `ng serve` | Start development server |
+| `build` | `ng build` | Build for production |
+| `watch` | `ng build --watch --configuration development` | Rebuild on changes |
+| `test` | `ng test` | Run unit tests |
+
+<Warning>
+Ensure the backend API is running before starting the frontend. The application expects the API to be available at `/v1/api` (configured in `proxy.conf.json`).
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Component Architecture" icon="sitemap" href="/frontend/components">
+    Explore individual components and their structure
+  </Card>
+  <Card title="Angular Services" icon="code" href="/frontend/services">
+    Learn about business logic and HTTP services
+  </Card>
+  <Card title="Routing & Guards" icon="shield" href="/frontend/routing">
+    Understand navigation and route protection
+  </Card>
+  <Card title="API Integration" icon="plug" href="/backend/api-reference">
+    View backend API endpoints
+  </Card>
+</CardGroup>

@@ -1,0 +1,377 @@
+---
+title: 'Authentication'
+description: 'Learn how authentication works in Trippins, including login, registration, and JWT-based security'
+---
+
+## Overview
+
+Trippins uses JWT (JSON Web Token) based authentication to secure user access. The platform supports three user types: Anonymous users, Registered users, and Administrators, each with different access levels.
+
+## How Authentication Works
+
+### JWT-Based Authentication
+
+Trippins implements stateless authentication using JWT tokens. When you log in successfully, the server generates a JWT token that contains your user identity and roles. This token is stored in your browser's local storage and included in all subsequent API requests.
+
+```typescript
+// The AuthService manages authentication state
+login(credentials: { email: string; password: string }): Observable<AuthenticationResponse> {
+  return this.http.post<AuthenticationResponse>(`${environment.baseUrlApi}/login`, credentials).pipe(
+    tap(response => {
+      this.storeJwt(response.jwt);
+      this.storeRoles(response.roles);
+      this.username = credentials.email;
+    })
+  );
+}
+```
+
+### Authentication Flow
+
+<Steps>
+  <Step title="Submit credentials">
+    User enters email and password through the login form
+  </Step>
+  <Step title="Server validation">
+    Backend validates credentials using Spring Security
+  </Step>
+  <Step title="Token generation">
+    If valid, server generates JWT token with user roles
+  </Step>
+  <Step title="Token storage">
+    Frontend stores JWT and roles in localStorage
+  </Step>
+  <Step title="Authenticated requests">
+    All API requests include the JWT in the Authorization header
+  </Step>
+</Steps>
+
+## Registration Process
+
+### Creating an Account
+
+New users can register by providing the following information:
+
+<CodeGroup>
+```typescript TypeScript - Registration Form
+registerForm: FormGroup = this.fb.group({
+  name: ['', [Validators.required]],
+  email: ['', [Validators.required, Validators.email]],
+  dni: ['', [
+    Validators.required,
+    Validators.pattern(/^[0-9]{8}[A-Z]$/),
+    Validators.maxLength(9)
+  ]],
+  number: ['', [Validators.required]],
+  password: ['', [
+    Validators.required,
+    Validators.minLength(8)
+  ]],
+  password2: ['', [Validators.required]]
+}, { validator: this.passwordMatchValidator });
+```
+
+```java Java - User DTO
+public class RegisteredUserDTO {
+    private String dni;           // Spanish ID (8 digits + letter)
+    private String name;          // Full name
+    private Integer number;       // Phone number
+    private String password;      // Min 8 characters
+    private String email;         // Must be unique
+    private Boolean admin;        // Set by system
+    private List<String> roles;   // Assigned roles
+}
+```
+</CodeGroup>
+
+### Validation Rules
+
+<AccordionGroup>
+  <Accordion title="DNI Format">
+    Must be exactly 9 characters: 8 digits followed by 1 uppercase letter (e.g., `12345678A`)
+  </Accordion>
+  
+  <Accordion title="Email Requirements">
+    - Must be a valid email format
+    - Must be unique across the system
+    - Used as the login username
+  </Accordion>
+  
+  <Accordion title="Password Security">
+    - Minimum 8 characters
+    - Stored using BCrypt encryption
+    - Must match confirmation password
+  </Accordion>
+</AccordionGroup>
+
+### Registration API Endpoint
+
+<Card title="POST /v1/api/users" icon="user-plus">
+  Create a new user account
+</Card>
+
+```bash
+curl -X POST http://localhost:8080/v1/api/users \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "John Doe",
+    "email": "john@example.com",
+    "dni": "12345678A",
+    "number": 123456789,
+    "password": "securepass123"
+  }'
+```
+
+<Note>
+  This endpoint is publicly accessible and does not require authentication. New users are automatically assigned the `ROLE_USER` role.
+</Note>
+
+## Login Process
+
+### User Login
+
+<Steps>
+  <Step title="Navigate to login page">
+    Access the login form at `/new/login`
+  </Step>
+  <Step title="Enter credentials">
+    Provide your registered email and password
+  </Step>
+  <Step title="Authentication">
+    System validates credentials and generates JWT
+  </Step>
+  <Step title="Redirect">
+    On success, redirected to home page or return URL
+  </Step>
+</Steps>
+
+### Login API Endpoint
+
+<Card title="POST /v1/api/login" icon="right-to-bracket">
+  Authenticate user and receive JWT token
+</Card>
+
+```java
+@PostMapping("/v1/api/login")
+public ResponseEntity<?> createAuthenticationToken(@RequestBody AuthenticationRequest authenticationRequest) {
+    // Authenticate using Spring Security
+    authenticationManager.authenticate(
+        new UsernamePasswordAuthenticationToken(
+            authenticationRequest.getEmail(),
+            authenticationRequest.getPassword()
+        )
+    );
+
+    // Load user details
+    final UserDetails userDetails = userDetailsService.loadUserByUsername(
+        authenticationRequest.getEmail()
+    );
+    
+    // Generate JWT token
+    final String jwt = jwtUtil.generateToken(userDetails);
+
+    // Extract roles
+    List<String> roles = userDetails.getAuthorities().stream()
+        .map(GrantedAuthority::getAuthority)
+        .collect(Collectors.toList());
+
+    return ResponseEntity.ok(new AuthenticationResponse(jwt, roles));
+}
+```
+
+### Response Format
+
+```json
+{
+  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "roles": ["ROLE_USER"]
+}
+```
+
+## Security Configuration
+
+### Access Control
+
+Trippins implements role-based access control (RBAC) with different permission levels:
+
+```java
+// Public endpoints - No authentication required
+.requestMatchers("/", "/index", "/about", "/contact", "/register").permitAll()
+.requestMatchers("/room", "/v1/api/query").permitAll()
+
+// User registration - Public
+.requestMatchers(HttpMethod.POST, "/addUser", "/v1/api/users").permitAll()
+
+// Authenticated users only
+.requestMatchers("/room/{code}", "/roomDetails").authenticated()
+.requestMatchers("/newHotel", "/booking", "/profile").authenticated()
+
+// Admin only endpoints
+.requestMatchers("/admin/**", "/v1/api/admin/**").hasRole("ADMIN")
+.requestMatchers("/v1/api/users/**", "/v1/api/reviews/**").hasRole("ADMIN")
+```
+
+### Password Encryption
+
+All passwords are encrypted using BCrypt before storage:
+
+```java
+@Bean
+public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
+}
+```
+
+<Warning>
+  Never store or transmit passwords in plain text. Always use the encrypted version from the database.
+</Warning>
+
+## Session Management
+
+### Stateless Architecture
+
+Trippins uses stateless session management:
+
+```java
+.sessionManagement(session -> session
+    .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+)
+```
+
+This means:
+- No server-side session storage
+- JWT token carries all authentication info
+- Scales easily across multiple servers
+- Logout simply requires removing the token client-side
+
+### JWT Token Storage
+
+```typescript
+// Store JWT in localStorage
+private storeJwt(jwt: string): void {
+  localStorage.setItem(this.JWT_KEY, jwt);
+}
+
+// Store user roles
+private storeRoles(roles: string[]): void {
+  localStorage.setItem(this.ROLES_KEY, JSON.stringify(roles));
+}
+
+// Check if user is logged in
+isLoggedIn(): boolean {
+  return !!this.getJwt();
+}
+```
+
+## Logout Process
+
+To log out, simply clear the stored JWT and roles:
+
+```typescript
+logout(): void {
+  localStorage.removeItem(this.JWT_KEY);
+  localStorage.removeItem(this.ROLES_KEY);
+}
+```
+
+<Tip>
+  After logout, users are typically redirected to the home page or login screen. The JWT token becomes invalid client-side, preventing further authenticated requests.
+</Tip>
+
+## Role-Based Access
+
+### Checking User Roles
+
+```typescript
+// Check if user has a specific role
+hasRole(role: string): boolean {
+  return this.getRoles().includes(role);
+}
+
+// Check if user has any of the specified roles
+hasAnyRole(roles: string[]): boolean {
+  var currentRoles: string[] = this.getRoles();
+  for (let index = 0; index < roles.length; index++) {
+    if (currentRoles.includes(roles[index])){
+      return true;
+    }
+  }
+  return false;
+}
+```
+
+### Common Role Checks
+
+<CardGroup cols={2}>
+  <Card title="Regular User" icon="user">
+    ```typescript
+    if (authService.hasRole('ROLE_USER')) {
+      // Can book rooms, write reviews
+    }
+    ```
+  </Card>
+  
+  <Card title="Administrator" icon="user-shield">
+    ```typescript
+    if (authService.hasRole('ROLE_ADMIN')) {
+      // Can manage all resources
+    }
+    ```
+  </Card>
+</CardGroup>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Secure Token Storage">
+    While localStorage is convenient, consider using httpOnly cookies for enhanced security in production environments to prevent XSS attacks.
+  </Accordion>
+  
+  <Accordion title="Token Expiration">
+    Implement token refresh mechanisms for long-lived sessions. Currently, tokens don't expire, but this should be addressed in production.
+  </Accordion>
+  
+  <Accordion title="HTTPS Only">
+    Always use HTTPS in production to encrypt authentication credentials during transmission.
+  </Accordion>
+  
+  <Accordion title="Password Policies">
+    Enforce strong password requirements and consider adding password strength indicators in the UI.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized Error">
+    - Check if JWT token is present in localStorage
+    - Verify token hasn't been manually deleted
+    - Ensure token is being sent in Authorization header
+    - Log in again to obtain a fresh token
+  </Accordion>
+  
+  <Accordion title="Registration Fails">
+    - Verify email is not already registered
+    - Check DNI format (8 digits + 1 letter)
+    - Ensure password is at least 8 characters
+    - Confirm passwords match
+  </Accordion>
+  
+  <Accordion title="Login Returns 403">
+    - Verify email and password are correct
+    - Check if account exists in database
+    - Ensure password encryption matches stored hash
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="User Roles" icon="users" href="/guides/user-roles">
+    Learn about different user types and permissions
+  </Card>
+  
+  <Card title="Making Reservations" icon="calendar-check" href="/guides/making-reservations">
+    Requires authentication to book rooms
+  </Card>
+</CardGroup>

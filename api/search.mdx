@@ -1,0 +1,483 @@
+---
+title: 'Advanced Search'
+description: 'API endpoints for advanced housing search with filters'
+---
+
+## Overview
+
+The Advanced Search API provides powerful filtering capabilities for searching housing listings based on tags (amenities) and star ratings. This endpoint enables users to find accommodations that match their specific requirements.
+
+<Note>
+This endpoint does not require authentication and is publicly accessible for searching available housing.
+</Note>
+
+---
+
+## Search Houses
+
+Search for housing listings with optional filters for tags and minimum star rating.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://localhost:8443/v1/api/query?tags=beach,pool&stars=4"
+```
+
+```javascript JavaScript
+const params = new URLSearchParams({
+  tags: 'beach,pool',
+  stars: '4'
+});
+
+const response = await fetch(`https://localhost:8443/v1/api/query?${params}`);
+const houses = await response.json();
+```
+
+```python Python
+import requests
+
+params = {
+    'tags': 'beach,pool',
+    'stars': 4
+}
+
+response = requests.get('https://localhost:8443/v1/api/query', params=params)
+houses = response.json()
+```
+</CodeGroup>
+
+### Query Parameters
+
+<ParamField query="tags" type="string">
+  Comma-separated list of tags to filter by (e.g., 'beach,pool,wifi'). Tag names are case-insensitive and will be trimmed of whitespace.
+  
+  **Example values:**
+  - `beach`
+  - `pool,wifi`
+  - `beach,pool,gym,spa`
+</ParamField>
+
+<ParamField query="stars" type="integer">
+  Minimum star rating to filter by (1-5). Only houses with this rating or higher will be returned.
+  
+  **Valid values:** 1, 2, 3, 4, 5
+</ParamField>
+
+<Info>
+Both parameters are optional. If neither is provided, all houses will be returned.
+</Info>
+
+### Response
+
+<ResponseField name="houses" type="array">
+  Array of HousingDTO objects matching the search criteria
+  
+  <Expandable title="HousingDTO properties">
+    <ResponseField name="code" type="integer">
+      Unique identifier for the house
+    </ResponseField>
+    
+    <ResponseField name="location" type="string">
+      Physical location/address of the accommodation
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      Name of the housing/hotel
+    </ResponseField>
+    
+    <ResponseField name="price" type="integer">
+      Price per night
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Detailed description of the accommodation
+    </ResponseField>
+    
+    <ResponseField name="stars" type="integer">
+      Star rating (1-5)
+    </ResponseField>
+    
+    <ResponseField name="acepted" type="boolean">
+      Whether the listing has been approved by administrators
+    </ResponseField>
+    
+    <ResponseField name="tags" type="array">
+      Set of Tag objects representing amenities/features
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Accordion title="Example Response - Search by Tags">
+```json
+[
+  {
+    "code": 1,
+    "location": "Barcelona, Spain",
+    "name": "Hotel Mediterranean",
+    "price": 150,
+    "description": "Beautiful beachfront hotel with modern amenities",
+    "stars": 4,
+    "acepted": true,
+    "tags": [
+      { "id": "pool" },
+      { "id": "wifi" },
+      { "id": "beach" }
+    ]
+  },
+  {
+    "code": 5,
+    "location": "Marbella, Spain",
+    "name": "Coastal Paradise Resort",
+    "price": 220,
+    "description": "Luxury beachfront resort with infinity pool",
+    "stars": 5,
+    "acepted": true,
+    "tags": [
+      { "id": "pool" },
+      { "id": "beach" },
+      { "id": "spa" },
+      { "id": "restaurant" }
+    ]
+  }
+]
+```
+</Accordion>
+
+<Accordion title="Example Response - Search by Stars">
+```json
+[
+  {
+    "code": 5,
+    "location": "Marbella, Spain",
+    "name": "Coastal Paradise Resort",
+    "price": 220,
+    "description": "Luxury beachfront resort with infinity pool",
+    "stars": 5,
+    "acepted": true,
+    "tags": [
+      { "id": "pool" },
+      { "id": "beach" },
+      { "id": "spa" }
+    ]
+  },
+  {
+    "code": 7,
+    "location": "Madrid, Spain",
+    "name": "Grand Hotel Madrid",
+    "price": 180,
+    "description": "5-star luxury in the heart of Madrid",
+    "stars": 5,
+    "acepted": true,
+    "tags": [
+      { "id": "gym" },
+      { "id": "wifi" },
+      { "id": "restaurant" }
+    ]
+  }
+]
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Successfully retrieved filtered houses |
+| 500 | Internal server error |
+
+---
+
+## Search Examples
+
+### Find Beachfront Hotels
+
+Search for all hotels with beach access:
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://localhost:8443/v1/api/query?tags=beach"
+```
+
+```javascript JavaScript
+fetch('https://localhost:8443/v1/api/query?tags=beach')
+  .then(res => res.json())
+  .then(houses => console.log(houses));
+```
+</CodeGroup>
+
+### Find Luxury Hotels (4+ Stars)
+
+Search for high-end accommodations:
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://localhost:8443/v1/api/query?stars=4"
+```
+
+```javascript JavaScript
+fetch('https://localhost:8443/v1/api/query?stars=4')
+  .then(res => res.json())
+  .then(houses => console.log(houses));
+```
+</CodeGroup>
+
+### Find Luxury Beachfront Hotels with Pool
+
+Combine multiple filters for specific requirements:
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://localhost:8443/v1/api/query?tags=beach,pool&stars=4"
+```
+
+```javascript JavaScript
+const params = {
+  tags: 'beach,pool',
+  stars: 4
+};
+
+const queryString = new URLSearchParams(params).toString();
+fetch(`https://localhost:8443/v1/api/query?${queryString}`)
+  .then(res => res.json())
+  .then(houses => console.log(houses));
+```
+</CodeGroup>
+
+### Find Budget Hotels with WiFi
+
+Search for affordable options with internet access:
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://localhost:8443/v1/api/query?tags=wifi&stars=2"
+```
+
+```javascript JavaScript
+fetch('https://localhost:8443/v1/api/query?tags=wifi&stars=2')
+  .then(res => res.json())
+  .then(houses => console.log(houses));
+```
+</CodeGroup>
+
+---
+
+## Available Tags
+
+Common tags used in the Trippins platform for filtering:
+
+<CardGroup cols={3}>
+  <Card title="beach" icon="umbrella-beach">
+    Beach access or beachfront location
+  </Card>
+  <Card title="pool" icon="water-ladder">
+    Swimming pool facility
+  </Card>
+  <Card title="wifi" icon="wifi">
+    WiFi internet access
+  </Card>
+  <Card title="parking" icon="square-parking">
+    Parking facilities
+  </Card>
+  <Card title="gym" icon="dumbbell">
+    Fitness center or gym
+  </Card>
+  <Card title="spa" icon="spa">
+    Spa and wellness facilities
+  </Card>
+  <Card title="restaurant" icon="utensils">
+    On-site restaurant
+  </Card>
+  <Card title="bar" icon="martini-glass">
+    Bar or lounge
+  </Card>
+  <Card title="pets" icon="dog">
+    Pet-friendly accommodation
+  </Card>
+  <Card title="breakfast" icon="mug-saucer">
+    Breakfast included
+  </Card>
+  <Card title="airport" icon="plane">
+    Airport shuttle service
+  </Card>
+  <Card title="balcony" icon="house-window">
+    Private balcony or terrace
+  </Card>
+</CardGroup>
+
+---
+
+## Search Logic
+
+### Tag Filtering
+
+The tag filter uses an **OR** logic by default:
+- Houses matching **any** of the specified tags will be returned
+- Tags are processed as lowercase and trimmed
+- Empty or null tag parameter returns all houses
+
+**Example:**
+```
+?tags=beach,pool
+```
+Returns houses with either a beach tag OR a pool tag (or both).
+
+### Star Rating Filtering
+
+The star filter uses a **minimum** threshold:
+- Only houses with stars >= specified value are returned
+- Valid values are 1-5
+
+**Example:**
+```
+?stars=4
+```
+Returns houses with 4 or 5 stars.
+
+### Combined Filters
+
+When both filters are applied, houses must satisfy **both** conditions:
+- Must have at least one of the specified tags **AND**
+- Must meet the minimum star rating
+
+**Example:**
+```
+?tags=beach,pool&stars=4
+```
+Returns 4+ star houses that have beach OR pool (or both).
+
+---
+
+## Implementation Details
+
+The search endpoint is implemented in the `AdvancedSearchRestController` class:
+
+**Endpoint:** `GET /v1/api/query`
+
+**Processing Steps:**
+1. Parse the comma-separated tags string
+2. Convert tags to lowercase and trim whitespace
+3. Query the database using `HousingService.findHousesByTagsAndStars()`
+4. Return matching houses as JSON
+
+**Source code reference:** 
+- Controller: `/controller/AdvancedSearchRestController.java:74-100`
+- Service method: `HousingService.findHousesByTagsAndStars(Set<String> tags, Integer stars)`
+
+---
+
+## Pagination Support
+
+For paginated housing results, use the AJAX endpoints:
+
+### Get Paginated Houses
+
+<Info>
+This endpoint returns paginated accepted houses and is useful for infinite scroll implementations.
+</Info>
+
+<ParamField query="page" type="integer">
+  Page number (0-based, default: 0)
+</ParamField>
+
+<ParamField query="size" type="integer">
+  Number of items per page (default: 6)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://localhost:8443/v1/api/rooms/extra?page=0&size=6"
+```
+
+```javascript JavaScript
+const page = 0;
+const size = 6;
+
+const response = await fetch(
+  `https://localhost:8443/v1/api/rooms/extra?page=${page}&size=${size}`
+);
+
+const paginatedHouses = await response.json();
+```
+</CodeGroup>
+
+**Response:**
+```json
+{
+  "content": [ /* array of Housing objects */ ],
+  "pageable": {
+    "pageNumber": 0,
+    "pageSize": 6,
+    "offset": 0
+  },
+  "totalPages": 5,
+  "totalElements": 28,
+  "last": false,
+  "first": true
+}
+```
+
+---
+
+## Error Handling
+
+### Error Response Format
+
+<ResponseField name="error" type="string">
+  Error type (e.g., "Search failed")
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Detailed error message describing what went wrong
+</ResponseField>
+
+<Accordion title="Example Error Response">
+```json
+{
+  "error": "Search failed",
+  "message": "Invalid star rating. Must be between 1 and 5."
+}
+```
+</Accordion>
+
+### Common Errors
+
+| Scenario | Status Code | Error Message |
+|----------|-------------|---------------|
+| Database connection failure | 500 | "Search failed - Database error" |
+| Invalid star value (< 1 or > 5) | 500 | "Invalid star rating. Must be between 1 and 5." |
+| Malformed request | 400 | "Bad Request - Invalid parameters" |
+
+---
+
+## Performance Tips
+
+<Tip>
+**For Optimal Performance:**
+- Be specific with tag filters to reduce result set size
+- Use pagination for large result sets
+- Cache frequently used search queries on the client side
+- Consider implementing debouncing for real-time search inputs
+- Use the `acepted: true` filter to show only approved listings
+</Tip>
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Filter by Amenities" icon="sliders">
+    Allow users to find hotels with specific features like pools, gyms, or beach access
+  </Card>
+  <Card title="Quality Filtering" icon="star">
+    Enable users to filter by minimum star rating for quality assurance
+  </Card>
+  <Card title="Vacation Planner" icon="umbrella-beach">
+    Help users find perfect vacation spots with desired amenities
+  </Card>
+  <Card title="Business Travel" icon="briefcase">
+    Find accommodations with business-friendly amenities like WiFi and parking
+  </Card>
+</CardGroup>
+
+## Related Endpoints
+
+- [Get All Houses](/api/housing#get-all-houses) - Retrieve complete housing list
+- [Get House by ID](/api/housing#get-house-by-id) - Get detailed information about a specific house
+- [Housing Tags](/api/housing#get-tags-by-house-id) - View available tags for a house

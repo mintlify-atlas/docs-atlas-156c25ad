@@ -1,0 +1,547 @@
+---
+title: 'Housing Management'
+description: 'API endpoints for managing hotel accommodations and housing listings'
+---
+
+## Overview
+
+The Housing Management API provides endpoints for creating, reading, updating, and deleting housing listings (hotels, accommodations). It also includes endpoints for managing housing tags and images.
+
+<Note>
+All endpoints require JWT authentication via the `Authorization: Bearer {token}` header.
+</Note>
+
+---
+
+## Get All Houses
+
+Retrieve a list of all housing listings in the system.
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://localhost:8443/v1/api/houses \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://localhost:8443/v1/api/houses', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const houses = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="houses" type="array">
+  Array of HousingDTO objects
+  
+  <Expandable title="HousingDTO properties">
+    <ResponseField name="code" type="integer" required>
+      Auto-generated unique identifier for the house (read-only)
+    </ResponseField>
+    
+    <ResponseField name="location" type="string" required>
+      Physical location/address of the accommodation
+    </ResponseField>
+    
+    <ResponseField name="name" type="string" required>
+      Name of the housing/hotel
+    </ResponseField>
+    
+    <ResponseField name="price" type="integer" required>
+      Price per night in the system's currency
+    </ResponseField>
+    
+    <ResponseField name="description" type="string">
+      Detailed description of the accommodation
+    </ResponseField>
+    
+    <ResponseField name="stars" type="integer">
+      Star rating (1-5)
+    </ResponseField>
+    
+    <ResponseField name="acepted" type="boolean">
+      Whether the listing has been approved by administrators
+    </ResponseField>
+    
+    <ResponseField name="tags" type="array">
+      Set of Tag objects with amenities/features (e.g., pool, wifi, beach)
+      
+      <Expandable title="Tag properties">
+        <ResponseField name="id" type="string">
+          Tag identifier (e.g., "pool", "wifi", "beach")
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Accordion title="Example Response">
+```json
+[
+  {
+    "code": 1,
+    "location": "Barcelona, Spain",
+    "name": "Hotel Mediterranean",
+    "price": 150,
+    "description": "Beautiful beachfront hotel with modern amenities",
+    "stars": 4,
+    "acepted": true,
+    "tags": [
+      { "id": "pool" },
+      { "id": "wifi" },
+      { "id": "beach" }
+    ]
+  },
+  {
+    "code": 2,
+    "location": "Madrid, Spain",
+    "name": "City Center Apartments",
+    "price": 85,
+    "description": "Comfortable apartments in the heart of Madrid",
+    "stars": 3,
+    "acepted": true,
+    "tags": [
+      { "id": "wifi" },
+      { "id": "parking" }
+    ]
+  }
+]
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Successfully retrieved list of houses |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Get House by ID
+
+Retrieve a specific housing listing by its code (ID).
+
+<ParamField path="id" type="integer" required>
+  Code/ID of the house to retrieve (e.g., 1)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://localhost:8443/v1/api/houses/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const houseId = 1;
+const response = await fetch(`https://localhost:8443/v1/api/houses/${houseId}`, {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const house = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+Returns a single HousingDTO object with all housing details.
+
+<Accordion title="Example Response">
+```json
+{
+  "code": 1,
+  "location": "Barcelona, Spain",
+  "name": "Hotel Mediterranean",
+  "price": 150,
+  "description": "Beautiful beachfront hotel with modern amenities",
+  "stars": 4,
+  "acepted": true,
+  "tags": [
+    { "id": "pool" },
+    { "id": "wifi" },
+    { "id": "beach" }
+  ]
+}
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Successfully retrieved house |
+| 404 | House not found |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Create House
+
+Create a new housing listing with the provided details.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://localhost:8443/v1/api/houses \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "location": "Valencia, Spain",
+    "name": "Coastal Resort",
+    "price": 200,
+    "description": "Luxury resort with ocean views",
+    "stars": 5,
+    "acepted": false,
+    "tags": [
+      { "id": "pool" },
+      { "id": "spa" },
+      { "id": "beach" }
+    ]
+  }'
+```
+
+```javascript JavaScript
+const houseData = {
+  location: 'Valencia, Spain',
+  name: 'Coastal Resort',
+  price: 200,
+  description: 'Luxury resort with ocean views',
+  stars: 5,
+  acepted: false,
+  tags: [
+    { id: 'pool' },
+    { id: 'spa' },
+    { id: 'beach' }
+  ]
+};
+
+const response = await fetch('https://localhost:8443/v1/api/houses', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(houseData)
+});
+
+const newHouse = await response.json();
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="location" type="string" required>
+  Physical location/address of the accommodation
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  Name of the housing/hotel
+</ParamField>
+
+<ParamField body="price" type="integer" required>
+  Price per night
+</ParamField>
+
+<ParamField body="description" type="string">
+  Detailed description of the accommodation
+</ParamField>
+
+<ParamField body="stars" type="integer">
+  Star rating from 1 to 5
+</ParamField>
+
+<ParamField body="acepted" type="boolean">
+  Approval status (typically false for new listings, requires admin approval)
+</ParamField>
+
+<ParamField body="tags" type="array">
+  Array of Tag objects representing amenities/features
+</ParamField>
+
+### Response
+
+Returns the created housing listing with an auto-generated code.
+
+<Accordion title="Example Response">
+```json
+{
+  "code": 3,
+  "location": "Valencia, Spain",
+  "name": "Coastal Resort",
+  "price": 200,
+  "description": "Luxury resort with ocean views",
+  "stars": 5,
+  "acepted": false,
+  "tags": [
+    { "id": "pool" },
+    { "id": "spa" },
+    { "id": "beach" }
+  ]
+}
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 201 | House created successfully |
+| 400 | Invalid input |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Update House
+
+Update an existing housing listing.
+
+<ParamField path="id" type="integer" required>
+  Code/ID of the house to update (e.g., 1)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X PUT https://localhost:8443/v1/api/houses/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "location": "Barcelona, Spain",
+    "name": "Hotel Mediterranean Deluxe",
+    "price": 175,
+    "description": "Updated description with new facilities",
+    "stars": 5,
+    "acepted": true,
+    "tags": [
+      { "id": "pool" },
+      { "id": "wifi" },
+      { "id": "beach" },
+      { "id": "gym" }
+    ]
+  }'
+```
+
+```javascript JavaScript
+const houseId = 1;
+const updateData = {
+  location: 'Barcelona, Spain',
+  name: 'Hotel Mediterranean Deluxe',
+  price: 175,
+  description: 'Updated description with new facilities',
+  stars: 5,
+  acepted: true,
+  tags: [
+    { id: 'pool' },
+    { id: 'wifi' },
+    { id: 'beach' },
+    { id: 'gym' }
+  ]
+};
+
+const response = await fetch(`https://localhost:8443/v1/api/houses/${houseId}`, {
+  method: 'PUT',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(updateData)
+});
+
+const updatedHouse = await response.json();
+```
+</CodeGroup>
+
+### Request Body
+
+All HousingDTO fields can be updated (see Create House for field descriptions).
+
+### Response
+
+Returns the updated housing listing.
+
+<Accordion title="Example Response">
+```json
+{
+  "code": 1,
+  "location": "Barcelona, Spain",
+  "name": "Hotel Mediterranean Deluxe",
+  "price": 175,
+  "description": "Updated description with new facilities",
+  "stars": 5,
+  "acepted": true,
+  "tags": [
+    { "id": "pool" },
+    { "id": "wifi" },
+    { "id": "beach" },
+    { "id": "gym" }
+  ]
+}
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | House updated successfully |
+| 404 | House not found |
+| 400 | Invalid input |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Delete House
+
+Delete a housing listing by its code.
+
+<ParamField path="id" type="integer" required>
+  Code/ID of the house to delete (e.g., 1)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://localhost:8443/v1/api/houses/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const houseId = 1;
+const response = await fetch(`https://localhost:8443/v1/api/houses/${houseId}`, {
+  method: 'DELETE',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+if (response.status === 204) {
+  console.log('House deleted successfully');
+}
+```
+</CodeGroup>
+
+### Response
+
+No content is returned on successful deletion.
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 204 | House deleted successfully |
+| 404 | House not found |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Get Tags by House ID
+
+Retrieve all tags (amenities/features) associated with a specific house.
+
+<ParamField path="id" type="integer" required>
+  Code/ID of the house (e.g., 1)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://localhost:8443/v1/api/houses/1/tags \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const houseId = 1;
+const response = await fetch(`https://localhost:8443/v1/api/houses/${houseId}/tags`, {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const tags = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="tags" type="array">
+  Array of TagDTO objects
+  
+  <Expandable title="TagDTO properties">
+    <ResponseField name="id" type="string">
+      Tag identifier/name (e.g., "pool", "wifi", "beach", "parking", "gym", "spa")
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Accordion title="Example Response">
+```json
+[
+  { "id": "pool" },
+  { "id": "wifi" },
+  { "id": "beach" },
+  { "id": "parking" }
+]
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Successfully retrieved tags |
+| 404 | House not found |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Housing Images
+
+For managing housing images (upload, retrieve, delete), see the [Housing Images Management](/api/housing-images) documentation.
+
+## Common Tag IDs
+
+Common tag identifiers used in the Trippins platform:
+
+- `pool` - Swimming pool
+- `wifi` - WiFi internet access
+- `beach` - Beach access
+- `parking` - Parking facilities
+- `gym` - Fitness center/gym
+- `spa` - Spa facilities
+- `restaurant` - On-site restaurant
+- `bar` - Bar/lounge
+- `pets` - Pet-friendly
+- `breakfast` - Breakfast included
+
+## Authentication
+
+All Housing Management endpoints require JWT authentication. Include your token in the Authorization header:
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error type
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Detailed error message
+</ResponseField>
+
+<Accordion title="Example Error Response">
+```json
+{
+  "error": "Not Found",
+  "message": "House with code 999 not found"
+}
+```
+</Accordion>

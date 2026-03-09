@@ -1,0 +1,969 @@
+---
+title: Angular Services
+description: Service layer architecture, HTTP communication, and business logic in the Trippins platform
+---
+
+## Services Overview
+
+The Trippins frontend uses **6 core services** to handle business logic, HTTP communication, authentication, and UI interactions. All services use Angular's `@Injectable` decorator with `providedIn: 'root'` for singleton instances.
+
+<CardGroup cols={3}>
+  <Card title="Authentication" icon="key">
+    AuthService
+  </Card>
+  <Card title="Housing Management" icon="hotel">
+    HousingServiceService
+  </Card>
+  <Card title="Reservations" icon="calendar">
+    ReservationServiceService
+  </Card>
+  <Card title="Reviews" icon="star">
+    ReviewServiceService
+  </Card>
+  <Card title="User Management" icon="user">
+    UserServiceService
+  </Card>
+  <Card title="Layout/UI" icon="palette">
+    LayoutService
+  </Card>
+</CardGroup>
+
+## Authentication Service
+
+Handles user authentication, JWT token management, and role-based authorization.
+
+### Service Implementation
+
+```typescript src/app/services/auth.service.ts
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
+import { Observable, catchError, map, of, tap } from 'rxjs';
+import { AuthenticationRequest, AuthenticationResponse, UserDTO } from '../models/DTOS/user-dto';
+import { environment } from '../../environments/environment';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class AuthService {
+  private readonly JWT_KEY = 'auth_jwt';
+  private readonly ROLES_KEY = 'user_roles';
+  private username: string | null = null;
+
+  constructor(private http: HttpClient) {}
+
+  login(credentials: { email: string; password: string }): Observable<AuthenticationResponse> {
+    return this.http.post<AuthenticationResponse>(
+      `${environment.baseUrlApi}/login`, 
+      credentials
+    ).pipe(
+      tap(response => {
+        this.storeJwt(response.jwt);
+        this.storeRoles(response.roles);
+        this.username = credentials.email;
+      })
+    );
+  }
+
+  private storeJwt(jwt: string): void {
+    localStorage.setItem(this.JWT_KEY, jwt);
+  }
+
+  private storeRoles(roles: string[]): void {
+    localStorage.setItem(this.ROLES_KEY, JSON.stringify(roles));
+  }
+
+  getJwt(): string | null {
+    return localStorage.getItem(this.JWT_KEY);
+  }
+
+  getRoles(): string[] {
+    const rolesJson = localStorage.getItem(this.ROLES_KEY);
+    return rolesJson ? JSON.parse(rolesJson) : [];
+  }
+
+  hasRole(role: string): boolean {
+    return this.getRoles().includes(role);
+  }
+
+  hasAnyRole(roles: string[]): boolean {
+    const currentRoles: string[] = this.getRoles();
+    for (let index = 0; index < roles.length; index++) {
+      if (currentRoles.includes(roles[index])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  isLoggedIn(): boolean {
+    return !!this.getJwt();
+  }
+
+  logout(): void {
+    localStorage.removeItem(this.JWT_KEY);
+    localStorage.removeItem(this.ROLES_KEY);
+  }
+
+  getUsername(): string | null {
+    if (this.username) return this.username;
+    
+    // Fallback to JWT parsing if username not set
+    const token = this.getJwt();
+    if (!token) return null;
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub || payload.username || null;
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  updateUsername(newUsername: string): void {
+    this.username = newUsername;
+  }
+
+  getUserDni(): Observable<string | null> {
+    const usernameemail = this.getUsername();
+    return this.http.get<UserDTO[]>(`${environment.baseUrlApi}/users`).pipe(
+      map(users => {
+        const user = users.find(u => u.email === usernameemail);
+        return user ? user.dni : null;
+      }),
+      catchError(err => {
+        console.error('Error loading user data:', err);
+        return of(null);
+      })
+    );
+  }
+
+  getUserName(): Observable<string | null> {
+    const usernameemail = this.getUsername();
+    return this.http.get<UserDTO[]>(`${environment.baseUrlApi}/users`).pipe(
+      map(users => {
+        const user = users.find(u => u.email === usernameemail);
+        return user ? user.name : null;
+      }),
+      catchError(err => {
+        console.error('Error loading user data:', err);
+        return of(null);
+      })
+    );
+  }
+}
+```
+
+### AuthService Methods
+
+<AccordionGroup>
+  <Accordion title="login(credentials)">
+    **Purpose**: Authenticate user and store JWT token
+    
+    **Parameters**:
+    - `credentials`: Object with `email` and `password`
+    
+    **Returns**: `Observable<AuthenticationResponse>`
+    
+    **Side Effects**:
+    - Stores JWT token in localStorage
+    - Stores user roles in localStorage
+    - Sets username in memory
+  </Accordion>
+
+  <Accordion title="getJwt()">
+    **Purpose**: Retrieve stored JWT token
+    
+    **Returns**: `string | null`
+    
+    **Usage**: Used by AuthInterceptor to attach token to requests
+  </Accordion>
+
+  <Accordion title="getRoles()">
+    **Purpose**: Get user's roles from localStorage
+    
+    **Returns**: `string[]` (e.g., `["ROLE_USER", "ROLE_ADMIN"]`)
+    
+    **Usage**: Role-based UI rendering and authorization
+  </Accordion>
+
+  <Accordion title="hasRole(role) / hasAnyRole(roles)">
+    **Purpose**: Check if user has specific role(s)
+    
+    **Parameters**:
+    - `role`: Single role string
+    - `roles`: Array of role strings
+    
+    **Returns**: `boolean`
+    
+    **Usage**: Guards, conditional rendering, authorization logic
+  </Accordion>
+
+  <Accordion title="isLoggedIn()">
+    **Purpose**: Check if user is authenticated
+    
+    **Returns**: `boolean`
+    
+    **Usage**: Route guards, header navigation display
+  </Accordion>
+
+  <Accordion title="logout()">
+    **Purpose**: Clear authentication data
+    
+    **Side Effects**:
+    - Removes JWT from localStorage
+    - Removes roles from localStorage
+  </Accordion>
+
+  <Accordion title="getUserDni() / getUserName()">
+    **Purpose**: Fetch additional user details from API
+    
+    **Returns**: `Observable<string | null>`
+    
+    **Usage**: Profile component, reservation forms
+  </Accordion>
+</AccordionGroup>
+
+### Usage Example
+
+<CodeGroup>
+
+```typescript Login Component
+import { AuthService } from '../../services/auth.service';
+
+export class LoginComponent {
+  constructor(
+    private authService: AuthService,
+    private router: Router
+  ) {}
+
+  onSubmit(): void {
+    const { email, password } = this.loginForm.value;
+    
+    this.authService.login({ email, password }).subscribe({
+      next: () => {
+        this.router.navigate(['/']);
+      },
+      error: (err) => {
+        this.errorMessage = 'Invalid credentials';
+      }
+    });
+  }
+}
+```
+
+```typescript Header Component
+export class HeaderComponent {
+  constructor(public authService: AuthService) {}
+
+  isAdmin(): boolean {
+    return this.authService.hasRole('ROLE_ADMIN');
+  }
+
+  logout(): void {
+    this.authService.logout();
+    this.router.navigate(['new/login']);
+  }
+}
+```
+
+```html Template Usage
+<div *ngIf="authService.isLoggedIn()">
+  <span>Welcome, {{ authService.getUsername() }}</span>
+  <button (click)="logout()">Logout</button>
+</div>
+
+<a *ngIf="authService.hasRole('ROLE_ADMIN')" routerLink="/new/admin">
+  Admin Panel
+</a>
+```
+
+</CodeGroup>
+
+## Housing Service
+
+Manages hotel/housing listings, search, and image uploads.
+
+```typescript src/app/services/housing-service.service.ts
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+import { HousingDTO, PagedResponse } from '../models/DTOS/housing-dto';
+import { environment } from '../../environments/environment';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class HousingServiceService {
+  constructor(private http: HttpClient) {}
+
+  getRooms(page: number, size: number): Observable<PagedResponse<HousingDTO>> {
+    return this.http.get<PagedResponse<HousingDTO>>(
+      `${environment.baseUrlApi}/rooms/extra?page=${page}&size=6`
+    );
+  }
+
+  searchHouses(tags: string, stars: number): Observable<any[]> {
+    return this.http.get<any[]>(
+      `${environment.baseUrlApi}/query?tags=${tags}&stars=${stars}`
+    );
+  }
+
+  getSpecificRoom(code: number): Observable<HousingDTO> {
+    return this.http.get<HousingDTO>(
+      `${environment.baseUrlApi}/houses/${code}`
+    );
+  }
+
+  createRoom(data: any): Observable<HousingDTO> {
+    return this.http.post<HousingDTO>(
+      `${environment.baseUrlApi}/houses`, 
+      data
+    );
+  }
+
+  uploadHousingImage(code: number, image: File): Observable<HousingDTO> {
+    const formData = new FormData();
+    formData.append('file', image);
+    return this.http.put<HousingDTO>(
+      `${environment.baseUrlApi}/houses/${code}/image`, 
+      formData
+    );
+  }
+}
+```
+
+### HousingService Methods
+
+| Method | Endpoint | Purpose | Return Type |
+|--------|----------|---------|-------------|
+| `getRooms(page, size)` | `GET /rooms/extra` | Paginated hotel listings | `Observable<PagedResponse<HousingDTO>>` |
+| `searchHouses(tags, stars)` | `GET /query` | Search by tags and rating | `Observable<HousingDTO[]>` |
+| `getSpecificRoom(code)` | `GET /houses/{code}` | Single hotel details | `Observable<HousingDTO>` |
+| `createRoom(data)` | `POST /houses` | Create new hotel | `Observable<HousingDTO>` |
+| `uploadHousingImage(code, image)` | `PUT /houses/{code}/image` | Upload hotel image | `Observable<HousingDTO>` |
+
+### Usage Example
+
+```typescript Room Component
+export class RoomComponent implements OnInit {
+  houses: any[] = [];
+  currentPage = -1;
+  pageSize = 6;
+  hasMore = true;
+
+  constructor(private houseService: HousingServiceService) {}
+
+  ngOnInit(): void {
+    this.loadHouses();
+  }
+
+  loadHouses(): void {
+    if (!this.hasMore) return;
+    this.currentPage++;
+
+    this.houseService.getRooms(this.currentPage, this.pageSize).subscribe({
+      next: (response) => {
+        this.houses = [...this.houses, ...response.content];
+        this.hasMore = !response.last;
+      },
+      error: (err) => {
+        console.error('Error loading houses:', err);
+      }
+    });
+  }
+
+  onSearchSubmit(): void {
+    this.houseService.searchHouses(this.tags, this.stars).subscribe({
+      next: (houses) => {
+        this.houses = houses;
+      }
+    });
+  }
+}
+```
+
+<Info>
+The **PagedResponse** interface matches Spring Boot's pagination structure with `content`, `last`, `totalPages`, etc.
+</Info>
+
+## Reservation Service
+
+Handles booking creation and retrieval.
+
+```typescript src/app/services/reservation-service.service.ts
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { environment } from '../../environments/environment.development';
+import { Observable } from 'rxjs';
+import { ReservationDTO } from '../models/DTOS/reservation-dto';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ReservationServiceService {
+  constructor(private http: HttpClient) {}
+
+  createReservation(data: any): Observable<ReservationDTO> {
+    return this.http.post<ReservationDTO>(
+      `${environment.baseUrlApi}/reservations`, 
+      data
+    );
+  }
+
+  getAllReservations(): Observable<ReservationDTO[]> {
+    return this.http.get<ReservationDTO[]>(
+      `${environment.baseUrlApi}/reservations`
+    );
+  }
+}
+```
+
+### Usage Example
+
+```typescript RoomDetails Component
+export class RoomDetailsComponent {
+  reservationForm: FormGroup;
+
+  constructor(
+    private fb: FormBuilder,
+    private reservationService: ReservationServiceService,
+    private authService: AuthService
+  ) {
+    this.reservationForm = this.fb.group({
+      checkIn: ['', Validators.required],
+      checkOut: ['', Validators.required]
+    });
+  }
+
+  onSubmitReservation(): void {
+    if (this.reservationForm.invalid || !this.house) return;
+
+    const reservationData = {
+      ...this.reservationForm.value,
+      housingCode: this.house.code,
+      housingName: this.house.name,
+      clientDni: this.clientDni,
+      valorated: false
+    };
+
+    this.reservationService.createReservation(reservationData).subscribe({
+      next: () => {
+        Swal.fire({
+          title: '¡Reserva exitosa! 🎉',
+          icon: 'success'
+        });
+        this.reservationForm.reset();
+      },
+      error: (err) => {
+        Swal.fire({
+          title: 'Error creating reservation',
+          icon: 'error'
+        });
+      }
+    });
+  }
+}
+```
+
+## Review Service
+
+Manages hotel reviews and ratings.
+
+```typescript src/app/services/review-service.service.ts
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+import { PagedResponse } from '../models/DTOS/housing-dto';
+import { ReviewDTO } from '../models/DTOS/review-dto';
+import { environment } from '../../environments/environment.development';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class ReviewServiceService {
+  constructor(private http: HttpClient) {}
+
+  getPaginatedComments(code: number, page: number): Observable<PagedResponse<ReviewDTO>> {
+    return this.http.get<PagedResponse<ReviewDTO>>(
+      `${environment.baseUrlApi}/rooms/${code}/comments/extra?page=${page}&size=6`
+    );
+  }
+  
+  createReview(commentData: any): Observable<ReviewDTO> {
+    return this.http.post<ReviewDTO>(
+      `${environment.baseUrlApi}/reviews`, 
+      commentData
+    );
+  }
+}
+```
+
+### Usage Example
+
+```typescript RoomDetails Component
+export class RoomDetailsComponent {
+  comments: ReviewDTO[] = [];
+  commentForm: FormGroup;
+
+  constructor(private reviewService: ReviewServiceService) {
+    this.commentForm = this.fb.group({
+      comment: ['', [Validators.required, Validators.minLength(10)]],
+      rating: [50, [Validators.required, Validators.min(0), Validators.max(100)]]
+    });
+  }
+
+  loadComments(code: number, page: number): void {
+    this.reviewService.getPaginatedComments(code, page).subscribe({
+      next: (response) => {
+        this.comments = [...this.comments, ...response.content];
+        this.currentPage = page;
+      }
+    });
+  }
+
+  onSubmitComment(): void {
+    const commentData = {
+      ...this.commentForm.value,
+      hotelCode: this.house.code,
+      userDni: this.clientDni,
+      userName: this.clientName
+    };
+
+    this.reviewService.createReview(commentData).subscribe({
+      next: () => {
+        Swal.fire({ title: 'Review submitted!', icon: 'success' });
+        this.loadComments(this.house!.code, 1);
+      }
+    });
+  }
+}
+```
+
+## User Service
+
+Handles user account operations.
+
+```typescript src/app/services/user-service.service.ts
+import { HttpClient } from '@angular/common/http';
+import { Injectable } from '@angular/core';
+import { Observable } from 'rxjs';
+import { UserDTO } from '../models/DTOS/user-dto';
+import { environment } from '../../environments/environment.development';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class UserServiceService {
+  constructor(private http: HttpClient) {}
+
+  createAccount(data: any): Observable<UserDTO> {
+    return this.http.post<UserDTO>(
+      `${environment.baseUrlApi}/users`,
+      data
+    );
+  }
+
+  updateAccount(data: any, dni: string): Observable<UserDTO> {
+    return this.http.put<UserDTO>(
+      `${environment.baseUrlApi}/users/${dni}`, 
+      data
+    );
+  }
+}
+```
+
+### Usage Example
+
+```typescript Profile Component
+export class ProfileComponent {
+  constructor(private userService: UserServiceService) {}
+
+  onSubmit(): void {
+    if (this.profileForm.invalid || !this.user) return;
+
+    const updatedUser = {
+      ...this.profileForm.value,
+      dni: this.user.dni,
+      roles: this.user.roles
+    };
+
+    this.userService.updateAccount(updatedUser, this.user.dni).subscribe({
+      next: () => {
+        this.isEditing = false;
+        this.user = { ...this.user!, ...updatedUser };
+      },
+      error: (err) => {
+        console.error('Error updating user:', err);
+      }
+    });
+  }
+}
+```
+
+## Layout Service
+
+Handles UI interactions and jQuery-based animations.
+
+```typescript src/app/services/layout.service.ts
+import { Injectable } from '@angular/core';
+import $ from 'jquery';
+
+@Injectable({
+  providedIn: 'root'
+})
+export class LayoutService {
+  initializeDropdownHover() {
+    const $dropdown = $(".dropdown");
+    const $dropdownToggle = $(".dropdown-toggle");
+    const $dropdownMenu = $(".dropdown-menu");
+    const showClass = "show";
+
+    $(window).on("load resize", () => {
+      if (window.matchMedia("(min-width: 992px)").matches) {
+        $dropdown.hover(
+          function () {
+            const $this = $(this);
+            $this.addClass(showClass);
+            $this.find($dropdownToggle).attr("aria-expanded", "true");
+            $this.find($dropdownMenu).addClass(showClass);
+          },
+          function () {
+            const $this = $(this);
+            $this.removeClass(showClass);
+            $this.find($dropdownToggle).attr("aria-expanded", "false");
+            $this.find($dropdownMenu).removeClass(showClass);
+          }
+        );
+      } else {
+        $dropdown.off("mouseenter mouseleave");
+      }
+    });
+  }
+
+  initializeVideoModal() {
+    $(document).ready(() => {
+      let $videoSrc: string;  
+      $('.btn-play').on('click', function () {
+        $videoSrc = $(this).data("src");
+      });
+
+      $('#videoModal').on('shown.bs.modal', function () {
+        $("#video").attr('src', $videoSrc + "?autoplay=1&amp;modestbranding=1&amp;showinfo=0");
+      });
+
+      $('#videoModal').on('hide.bs.modal', function () {
+        $("#video").attr('src', $videoSrc);
+      });
+    });
+  }
+
+  checkLoggedInCookie() {
+    if (document.cookie.includes('justLoggedIn=true')) {
+      document.cookie = 'justLoggedIn=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;';
+      setTimeout(() => {
+        window.location.reload();
+      }, 50);
+    }
+  }
+}
+```
+
+<Note>
+**LayoutService** bridges Angular with legacy jQuery components like Bootstrap dropdowns and video modals.
+</Note>
+
+## HTTP Interceptor
+
+Automatically attaches JWT tokens to all HTTP requests.
+
+```typescript src/app/interceptors/auth.interceptor.ts
+import { Injectable } from '@angular/core';
+import {
+  HttpRequest,
+  HttpHandler,
+  HttpEvent,
+  HttpInterceptor
+} from '@angular/common/http';
+import { Observable } from 'rxjs';
+import { AuthService } from '../services/auth.service';
+
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+  constructor(private authService: AuthService) {}
+
+  intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
+    const token = this.authService.getJwt();
+    if (token) {
+      request = request.clone({
+        setHeaders: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+    }
+    return next.handle(request);
+  }
+}
+```
+
+<Accordion title="How the Interceptor Works">
+  1. **Intercepts All Requests**: Catches every HTTP request made by the app
+  2. **Checks for Token**: Gets JWT from AuthService
+  3. **Clones Request**: Creates new request with Authorization header
+  4. **Adds Bearer Token**: Formats as `Authorization: Bearer <token>`
+  5. **Passes to Next Handler**: Continues request pipeline
+</Accordion>
+
+### Interceptor Registration
+
+The interceptor is registered in the app module:
+
+```typescript src/app/app.module.ts
+import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
+import { AuthInterceptor } from './interceptors/auth.interceptor';
+
+@NgModule({
+  imports: [HttpClientModule],
+  providers: [
+    { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true }
+  ]
+})
+export class AppModule { }
+```
+
+<Info>
+The `multi: true` flag allows **multiple interceptors** to be registered. They execute in the order they're provided.
+</Info>
+
+## Service Communication Patterns
+
+### Component → Service → API
+
+<Steps>
+  <Step title="Component Calls Service">
+    ```typescript
+    this.housingService.getRooms(0, 6)
+    ```
+  </Step>
+  <Step title="Service Makes HTTP Request">
+    ```typescript
+    this.http.get(`${environment.baseUrlApi}/rooms/extra`)
+    ```
+  </Step>
+  <Step title="Interceptor Adds JWT">
+    ```typescript
+    request.clone({ setHeaders: { Authorization: `Bearer ${token}` }})
+    ```
+  </Step>
+  <Step title="Backend Validates Token">
+    Spring Security verifies JWT signature and permissions
+  </Step>
+  <Step title="Response Returns to Component">
+    Component receives Observable data and updates view
+  </Step>
+</Steps>
+
+### Error Handling Pattern
+
+```typescript
+this.housingService.getRooms(page, size).subscribe({
+  next: (response) => {
+    // Success handling
+    this.houses = response.content;
+  },
+  error: (err) => {
+    // Error handling
+    console.error('Error loading houses:', err);
+    
+    if (err.status === 401) {
+      // Unauthorized - redirect to login
+      this.authService.logout();
+      this.router.navigate(['new/login']);
+    } else if (err.status === 403) {
+      // Forbidden - show error
+      this.router.navigate(['new/error']);
+    } else {
+      // Generic error
+      Swal.fire({ title: 'Error', text: err.message, icon: 'error' });
+    }
+  },
+  complete: () => {
+    // Optional cleanup
+    this.isLoading = false;
+  }
+});
+```
+
+## Data Transfer Objects (DTOs)
+
+Services use TypeScript interfaces for type safety:
+
+<CodeGroup>
+
+```typescript UserDTO
+export interface UserDTO {
+  dni: string;
+  name: string;
+  number: number;
+  email: string;
+  admin: boolean;
+  roles: UserRole[];
+}
+
+export interface AuthenticationResponse {
+  jwt: string;
+  roles: string[];
+}
+```
+
+```typescript HousingDTO
+export interface HousingDTO {
+  code: number;
+  location: string;
+  name: string;
+  image: string;
+  description: string;
+  stars: number;
+  acepted: boolean;
+  tags: TagDTO[];
+  price: number;
+}
+
+export interface PagedResponse<T> {
+  content: T[];
+  pageable: {
+    pageNumber: number;
+    pageSize: number;
+  };
+  last: boolean;
+  totalElements: number;
+  totalPages: number;
+  size: number;
+}
+```
+
+```typescript ReservationDTO
+export interface ReservationDTO {
+  id: number;
+  checkIn: Date;
+  checkOut: Date;
+  valorated: boolean;
+  clientDni: string;
+  housingCode: number;
+  housingName: string;
+}
+```
+
+```typescript ReviewDTO
+export interface ReviewDTO {
+  reviewId: number;
+  rating: number;
+  comment: string;
+  hotelCode: number;
+  userName: string;
+  userDni: string;
+}
+```
+
+</CodeGroup>
+
+## Service Best Practices
+
+<AccordionGroup>
+  <Accordion title="Singleton Pattern">
+    - Use `providedIn: 'root'` for app-wide services
+    - Services are automatically lazy-loaded
+    - Single instance shared across all components
+  </Accordion>
+
+  <Accordion title="RxJS Operators">
+    - Use `tap()` for side effects (logging, storing tokens)
+    - Use `map()` for data transformation
+    - Use `catchError()` for error handling
+    - Use `switchMap()` for dependent requests
+  </Accordion>
+
+  <Accordion title="Type Safety">
+    - Always type Observable return values
+    - Define DTOs for all API responses
+    - Use interfaces over types
+    - Avoid `any` type
+  </Accordion>
+
+  <Accordion title="Error Handling">
+    - Handle errors in components, not services
+    - Use consistent error response format
+    - Log errors for debugging
+    - Provide user-friendly error messages
+  </Accordion>
+
+  <Accordion title="HTTP Best Practices">
+    - Use environment variables for base URLs
+    - Implement retry logic for transient failures
+    - Cancel in-flight requests on component destroy
+    - Use proper HTTP methods (GET, POST, PUT, DELETE)
+  </Accordion>
+</AccordionGroup>
+
+## Testing Services
+
+### Unit Testing Example
+
+```typescript
+import { TestBed } from '@angular/core/testing';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { AuthService } from './auth.service';
+import { environment } from '../../environments/environment';
+
+describe('AuthService', () => {
+  let service: AuthService;
+  let httpMock: HttpTestingController;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [HttpClientTestingModule],
+      providers: [AuthService]
+    });
+    service = TestBed.inject(AuthService);
+    httpMock = TestBed.inject(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  it('should login and store JWT', () => {
+    const mockResponse = {
+      jwt: 'mock-token',
+      roles: ['ROLE_USER']
+    };
+
+    service.login({ email: 'test@example.com', password: 'password' }).subscribe(response => {
+      expect(response.jwt).toBe('mock-token');
+      expect(service.getJwt()).toBe('mock-token');
+      expect(service.getRoles()).toEqual(['ROLE_USER']);
+    });
+
+    const req = httpMock.expectOne(`${environment.baseUrlApi}/login`);
+    expect(req.request.method).toBe('POST');
+    req.flush(mockResponse);
+  });
+
+  it('should check if user has role', () => {
+    localStorage.setItem('user_roles', JSON.stringify(['ROLE_ADMIN']));
+    expect(service.hasRole('ROLE_ADMIN')).toBe(true);
+    expect(service.hasRole('ROLE_USER')).toBe(false);
+  });
+});
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Component Architecture" icon="puzzle-piece" href="/frontend/components">
+    See how components use these services
+  </Card>
+  <Card title="Backend API" icon="server" href="/backend/api-reference">
+    Explore API endpoints consumed by services
+  </Card>
+</CardGroup>

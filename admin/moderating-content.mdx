@@ -1,0 +1,760 @@
+---
+title: Moderating Content
+description: Learn how administrators moderate user reviews, manage content quality, and maintain platform standards
+---
+
+## Overview
+
+Content moderation is a critical administrative function in Trippins. Administrators have the responsibility to review user-generated content, remove inappropriate reviews, edit misleading information, and ensure all content meets platform quality and safety standards.
+
+<Note>
+Admin privileges are required for all content moderation operations. The `ADMIN` role grants full access to review management.
+</Note>
+
+## Review Entity Structure
+
+Reviews are the primary form of user-generated content on the platform. Understanding the data structure is essential for effective moderation.
+
+<CodeGroup>
+```java Review.java
+@Entity
+public class Review {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "reviewId")
+    private Integer reviewId;
+
+    @Column(name = "rating", nullable = false)
+    private Integer rating;
+
+    @Column(name = "comment", nullable = false)
+    private String comment;
+
+    @ManyToOne
+    @JoinColumn(name = "Hotel_code", referencedColumnName = "code", nullable = false)
+    private Housing hotel;
+
+    @ManyToOne
+    @JoinColumn(name = "user_ID", referencedColumnName = "dni", nullable = false)
+    private User user;
+}
+```
+
+```java ReviewDTO.java
+public class ReviewDTO {
+    private Integer reviewId;
+    private Integer rating;
+    private String comment;
+    private int hotelCode;
+    private String userName;
+    private String userDni;
+}
+```
+</CodeGroup>
+
+### Key Fields
+
+<ParamField path="reviewId" type="Integer">
+  Auto-generated unique identifier for each review
+</ParamField>
+
+<ParamField path="rating" type="Integer">
+  Numerical rating given by the user (typically 1-5 stars or 0-100 scale)
+</ParamField>
+
+<ParamField path="comment" type="String">
+  Text content of the review written by the user
+</ParamField>
+
+<ParamField path="hotel" type="Housing">
+  Many-to-one relationship with the Housing entity being reviewed
+</ParamField>
+
+<ParamField path="user" type="User">
+  Many-to-one relationship with the User who wrote the review
+</ParamField>
+
+## Admin Workflows
+
+### Viewing All Reviews
+
+Administrators can retrieve all reviews across the platform for moderation purposes.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.trippins.com/v1/api/reviews" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.trippins.com/v1/api/reviews', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer ADMIN_JWT_TOKEN'
+  }
+});
+
+const allReviews = await response.json();
+```
+
+```java Service Implementation
+public List<ReviewDTO> getAllReviews() {
+    List<Review> reviews = reviewRepository.findAll();
+    List<ReviewDTO> reviewDTOs = new ArrayList<>();
+
+    for (Review review: reviews) {
+        reviewDTOs.add(new ReviewDTO(review));
+    }
+    return reviewDTOs;
+}
+```
+</CodeGroup>
+
+**Response Example:**
+```json
+[
+  {
+    "reviewId": 1,
+    "rating": 100,
+    "comment": "Godin el sitio",
+    "hotelCode": 1,
+    "userName": "Pepe",
+    "userDni": "12345678A"
+  },
+  {
+    "reviewId": 2,
+    "rating": 50,
+    "comment": "Normalito, la verdad que mejorable",
+    "hotelCode": 1,
+    "userName": "Pepe",
+    "userDni": "12345678A"
+  },
+  {
+    "reviewId": 3,
+    "rating": 25,
+    "comment": "Llego a saber que no tienen baño y no reservo",
+    "hotelCode": 1,
+    "userName": "Pepe",
+    "userDni": "12345678A"
+  }
+]
+```
+
+### Viewing a Specific Review
+
+Retrieve detailed information about a single review for closer inspection.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.trippins.com/v1/api/reviews/1" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```java Service
+public ReviewDTO getReviewById(Integer id) {
+    Optional<Review> review = reviewRepository.findById(id);
+    ReviewDTO reviewDTO = new ReviewDTO(review.get());
+    return reviewDTO;
+}
+```
+</CodeGroup>
+
+<Info>
+Returns `200 OK` with the review details, or `404 Not Found` if the review doesn't exist
+</Info>
+
+### Filtering Reviews by Property
+
+View all reviews for a specific housing to assess property reputation or identify patterns.
+
+<CodeGroup>
+```java Service Method with Pagination
+public Page<ReviewDTO> findByHotel(int code, Pageable pageable) {
+    Housing house = housingRepository.findByCode(code).get();
+    Page<Review> paginatedReview = reviewRepository.findByHotel(house, pageable);
+
+    return paginatedReview.map(review -> {
+        ReviewDTO dto = new ReviewDTO();
+        dto.setReviewId(review.getReviewId());
+        dto.setRating(review.getRating());
+        dto.setComment(review.getComment());
+        dto.setHotelCode(review.getHotel().getCode());
+        dto.setUserDni(review.getUser().getDni());
+        dto.setUserName(review.getUser().getName());
+        return dto;
+    });
+}
+```
+
+```java Alternative: Get Top 3 Reviews
+public List<ReviewDTO> getReviewsByHouse(Integer code) {
+    var allReviews = reviewRepository.findAll();
+    allReviews = allReviews.stream()
+                .filter(review -> review.getHotel().getCode() == code)
+                .limit(3)
+                .collect(Collectors.toList());
+
+    List<ReviewDTO> reviewDTOs = new ArrayList<>(); 
+    for (Review review : allReviews) {
+        reviewDTOs.add(new ReviewDTO(review));
+    }
+    return reviewDTOs;
+}
+```
+</CodeGroup>
+
+<Tip>
+Use pagination for properties with many reviews to optimize performance and user experience
+</Tip>
+
+### Editing a Review
+
+Administrators can edit review content to remove inappropriate language, correct misinformation, or address policy violations.
+
+<Steps>
+  <Step title="Identify Problematic Content">
+    Review the comment and rating to identify violations of community guidelines.
+  </Step>
+  
+  <Step title="Make Necessary Edits">
+    ```bash
+    curl -X PUT "https://api.trippins.com/v1/api/reviews/3" \
+      -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "reviewId": 3,
+        "rating": 25,
+        "comment": "[Content removed by moderator - violated community guidelines]",
+        "hotelCode": 1,
+        "userDni": "12345678A",
+        "userName": "Pepe"
+      }'
+    ```
+  </Step>
+  
+  <Step title="Log the Moderation Action">
+    Document the reason for modification for transparency and audit purposes.
+  </Step>
+</Steps>
+
+<CodeGroup>
+```java Service Implementation
+public ReviewDTO updateReview(Integer id, ReviewDTO review) {
+    Optional<Review> originalReview = reviewRepository.findById(id);
+    Review finalOriginalReview = originalReview.get();
+
+    finalOriginalReview.setReviewId(review.getReviewId());
+    finalOriginalReview.setComment(review.getComment());
+    finalOriginalReview.setHotel(
+        housingRepository.findByCode(review.getHotelCode()).get()
+    );
+    finalOriginalReview.setRating(review.getRating());
+    finalOriginalReview.setUser(
+        userRepository.findById(review.getUserDni()).get()
+    );
+
+    reviewRepository.save(finalOriginalReview);
+    return new ReviewDTO(finalOriginalReview);
+}
+```
+</CodeGroup>
+
+<Warning>
+Always preserve the original review in an audit log before editing. Consider adding a "modified by admin" indicator.
+</Warning>
+
+### Deleting a Review
+
+Remove reviews that severely violate platform policies, contain illegal content, or are spam.
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://api.trippins.com/v1/api/reviews/3" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```java Service
+public void deleteReview(Integer id) {
+    reviewRepository.deleteById(id);
+}
+```
+</CodeGroup>
+
+<Info>
+Returns `204 No Content` on successful deletion. This operation is permanent and cannot be undone.
+</Info>
+
+### Creating Admin Reviews
+
+Administrators can create reviews for testing, demonstrations, or to add official property assessments.
+
+<CodeGroup>
+```bash cURL
+curl -X POST "https://api.trippins.com/v1/api/reviews" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rating": 95,
+    "comment": "Verified by admin - excellent property with outstanding service",
+    "hotelCode": 5,
+    "userDni": "ADMIN001",
+    "userName": "Platform Administrator"
+  }'
+```
+
+```java Service Implementation
+public ReviewDTO createReview(ReviewDTO review) {
+    Review newReview = new Review(
+        review.getReviewId(),
+        review.getRating(),
+        review.getComment(),
+        housingRepository.findByCode(review.getHotelCode()).get(),
+        userRepository.findById(review.getUserDni()).get()
+    );
+    reviewRepository.save(newReview);
+    return new ReviewDTO(newReview);
+}
+```
+</CodeGroup>
+
+<Check>
+Admin-created reviews can be marked with a special indicator to distinguish them from user reviews
+</Check>
+
+## Content Moderation Strategies
+
+### Automated Filtering
+
+Implement automated checks for common policy violations:
+
+<CardGroup cols={2}>
+  <Card title="Profanity Detection" icon="filter">
+    Flag reviews containing offensive language for manual review
+  </Card>
+  <Card title="Spam Detection" icon="shield-halved">
+    Identify repetitive or promotional content patterns
+  </Card>
+  <Card title="Rating Anomalies" icon="chart-line">
+    Detect suspiciously high or low ratings from new accounts
+  </Card>
+  <Card title="Length Validation" icon="ruler">
+    Flag unusually short or excessively long reviews
+  </Card>
+</CardGroup>
+
+### Manual Review Workflow
+
+<Steps>
+  <Step title="Queue Management">
+    Maintain a queue of flagged reviews that require manual inspection.
+  </Step>
+  
+  <Step title="Assessment">
+    Review the content against community guidelines and platform policies.
+  </Step>
+  
+  <Step title="Action Decision">
+    Decide whether to approve, edit, or remove the review.
+  </Step>
+  
+  <Step title="User Communication">
+    Notify the user if their content was modified or removed, explaining the reason.
+  </Step>
+  
+  <Step title="Documentation">
+    Log all moderation actions for accountability and appeals.
+  </Step>
+</Steps>
+
+### Content Policy Guidelines
+
+<AccordionGroup>
+  <Accordion title="Prohibited Content">
+    - Hate speech, discrimination, or harassment
+    - Personal attacks on staff or other guests
+    - Illegal activity or content
+    - Spam or promotional material
+    - False or misleading information
+    - Personally identifiable information (PII) of others
+  </Accordion>
+  
+  <Accordion title="Requires Editing">
+    - Minor profanity that can be censored
+    - Potentially identifying information that can be redacted
+    - Duplicate content that can be consolidated
+    - Formatting issues or readability problems
+  </Accordion>
+  
+  <Accordion title="Allowed Content">
+    - Honest opinions about the stay experience
+    - Constructive criticism with specific examples
+    - Praise for exceptional service
+    - Factual descriptions of amenities and location
+    - Photos that comply with privacy standards
+  </Accordion>
+</AccordionGroup>
+
+## Data Initialization
+
+The system includes sample reviews for development and testing:
+
+```java ReviewService.java
+public void initializeComments() {
+    Optional<User> defUser = userRepository.findByName("Pepe");
+    Optional<Housing> defHousing = housingRepository.findById(1);
+    
+    List<Review> comments = Arrays.asList(
+        new Review(1, 100, "Godin el sitio", defHousing.get(), defUser.get()),
+        new Review(2, 50, "Normalito, la verdad que mejorable", 
+                   defHousing.get(), defUser.get()),
+        new Review(3, 25, "Llego a saber que no tienen baño y no reservo", 
+                   defHousing.get(), defUser.get())
+    );
+    
+    reviewRepository.saveAll(comments);
+}
+```
+
+<Note>
+This initialization runs on application startup to provide test data for development environments
+</Note>
+
+## Security and Permissions
+
+### Role-Based Access Control
+
+Review management endpoints require the `ADMIN` role:
+
+```java SecurityConfiguration.java
+@Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth
+        .requestMatchers("/v1/api/reviews/**").hasRole("ADMIN")
+        .requestMatchers("/v1/api/admin/**").hasRole("ADMIN")
+        // ...
+    );
+    return http.build();
+}
+```
+
+### JWT Authentication
+
+All moderation operations require a valid JWT token:
+
+<CodeGroup>
+```bash Authorization Header
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+```java Controller Security
+@RestController
+@RequestMapping("/v1/api/reviews")
+@Tag(name = "Review Management", description = "APIs for managing reviews")
+public class ReviewRestController {
+
+    @SecurityRequirement(name = "JWT")
+    @GetMapping
+    public ResponseEntity<List<ReviewDTO>> getAllReviews() {
+        List<ReviewDTO> reviewDTOs = reviewService.getAllReviews();
+        return ResponseEntity.ok(reviewDTOs);
+    }
+}
+```
+</CodeGroup>
+
+<Warning>
+Non-admin users attempting to access review management endpoints receive `403 Forbidden`
+</Warning>
+
+## API Reference
+
+### Review Management Endpoints
+
+<ResponseField name="GET /v1/api/reviews" type="GET">
+  Retrieve all reviews in the system
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Response**: `200 OK` with array of ReviewDTO objects
+</ResponseField>
+
+<ResponseField name="GET /v1/api/reviews/{id}" type="GET">
+  Get a specific review by ID
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Parameters**: 
+  - `id` (path) - Review ID (e.g., 1)
+  
+  **Response**: `200 OK` with ReviewDTO object
+</ResponseField>
+
+<ResponseField name="POST /v1/api/reviews" type="POST">
+  Create a new review
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Body**: ReviewDTO object (reviewId is auto-generated)
+  
+  **Response**: `201 Created` with created ReviewDTO
+</ResponseField>
+
+<ResponseField name="PUT /v1/api/reviews/{id}" type="PUT">
+  Update an existing review
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Parameters**: 
+  - `id` (path) - Review ID to update
+  
+  **Body**: Complete ReviewDTO object
+  
+  **Response**: `200 OK` with updated ReviewDTO
+</ResponseField>
+
+<ResponseField name="DELETE /v1/api/reviews/{id}" type="DELETE">
+  Delete a review
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Parameters**: 
+  - `id` (path) - Review ID to delete
+  
+  **Response**: `204 No Content`
+</ResponseField>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Document All Moderation Actions">
+    Maintain detailed logs of why content was edited or removed. This supports transparency and helps with appeals.
+  </Accordion>
+  
+  <Accordion title="Establish Clear Guidelines">
+    Create and publish comprehensive content policies so users understand what's acceptable before posting.
+  </Accordion>
+  
+  <Accordion title="Apply Consistent Standards">
+    Ensure all moderators apply the same criteria when evaluating content to maintain fairness.
+  </Accordion>
+  
+  <Accordion title="Preserve Original Content">
+    Before editing or deleting, archive the original review in a secure moderation log for audit purposes.
+  </Accordion>
+  
+  <Accordion title="Communicate with Users">
+    When taking action on a review, notify the user with a clear explanation of the policy violation.
+  </Accordion>
+  
+  <Accordion title="Monitor Rating Manipulation">
+    Watch for patterns of fake positive/negative reviews that could indicate manipulation attempts.
+  </Accordion>
+  
+  <Accordion title="Respond Promptly to Reports">
+    When users report inappropriate content, review and take action quickly to maintain platform trust.
+  </Accordion>
+</AccordionGroup>
+
+## Moderation Metrics and Reporting
+
+### Key Performance Indicators
+
+<CardGroup cols={2}>
+  <Card title="Total Reviews" icon="comment">
+    Track overall review volume and growth
+  </Card>
+  <Card title="Moderation Actions" icon="gavel">
+    Count of edited or deleted reviews per period
+  </Card>
+  <Card title="Average Rating" icon="star">
+    Platform-wide and per-property rating averages
+  </Card>
+  <Card title="Response Time" icon="clock">
+    Time from flag to resolution for reported content
+  </Card>
+</CardGroup>
+
+### Sample Analytics Queries
+
+```java
+// Calculate average rating across all reviews
+double avgRating = reviewRepository.findAll().stream()
+    .mapToInt(Review::getRating)
+    .average()
+    .orElse(0.0);
+
+// Find properties with low ratings (< 50)
+List<Review> lowRatedReviews = reviewRepository.findAll().stream()
+    .filter(r -> r.getRating() < 50)
+    .collect(Collectors.toList());
+
+// Count reviews per property
+Map<Integer, Long> reviewsPerHotel = reviewRepository.findAll().stream()
+    .collect(Collectors.groupingBy(
+        r -> r.getHotel().getCode(), 
+        Collectors.counting()
+    ));
+```
+
+## Handling User Reports
+
+### Report Workflow
+
+<Steps>
+  <Step title="User Submits Report">
+    User flags a review as inappropriate through the platform UI.
+  </Step>
+  
+  <Step title="Review Enters Queue">
+    Reported review is added to the moderation queue for admin review.
+  </Step>
+  
+  <Step title="Admin Assessment">
+    Admin retrieves the review, reads the report reason, and evaluates the content.
+  </Step>
+  
+  <Step title="Take Action">
+    Admin decides to: approve (no violation), edit (minor issues), or delete (serious violation).
+  </Step>
+  
+  <Step title="Notify Stakeholders">
+    Inform both the reporter and the review author of the outcome.
+  </Step>
+</Steps>
+
+### Common Report Categories
+
+<Tabs>
+  <Tab title="Offensive Content">
+    Reviews containing profanity, hate speech, or personal attacks require immediate attention and often deletion.
+  </Tab>
+  
+  <Tab title="Fake Review">
+    Suspected fake reviews should be investigated by checking user history, reservation records, and content patterns.
+  </Tab>
+  
+  <Tab title="Privacy Violation">
+    Reviews exposing personal information (names, addresses, phone numbers) must be edited to remove PII.
+  </Tab>
+  
+  <Tab title="Off-Topic">
+    Reviews unrelated to the property experience may need editing or deletion depending on severity.
+  </Tab>
+</Tabs>
+
+## Integration with Reservation System
+
+Reviews are connected to the reservation system through the `valorated` flag:
+
+```java
+// After user submits review
+Review newReview = reviewService.createReview(reviewDTO);
+
+// Update corresponding reservation
+Reservation reservation = reservationService.getReservationById(reservationId);
+reservation.setValorated(true);
+reservationService.updateReservation(reservationId, reservation);
+```
+
+<Info>
+This linkage ensures each stay can only be reviewed once and tracks review completion rates
+</Info>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="404 Not Found for Review">
+    **Cause**: The review ID doesn't exist in the database
+    
+    **Solution**: Verify the ID is correct using the GET all reviews endpoint
+  </Accordion>
+  
+  <Accordion title="Cannot Update Review - Invalid Hotel Code">
+    **Cause**: The `hotelCode` in the update doesn't match an existing housing
+    
+    **Solution**: Ensure the `hotelCode` corresponds to a valid Housing entity in the database
+  </Accordion>
+  
+  <Accordion title="Cannot Update Review - Invalid User DNI">
+    **Cause**: The `userDni` doesn't match an existing user
+    
+    **Solution**: Verify the user exists before updating the review
+  </Accordion>
+  
+  <Accordion title="Duplicate Reviews">
+    **Cause**: No constraint preventing multiple reviews from same user for same property
+    
+    **Solution**: Implement business logic to check existing reviews before creation
+  </Accordion>
+  
+  <Accordion title="Rating Out of Range">
+    **Cause**: No validation on rating values (should be 0-100 or 1-5)
+    
+    **Solution**: Add validation constraints in the DTO and entity layers
+  </Accordion>
+</AccordionGroup>
+
+## Advanced Moderation Features
+
+### Sentiment Analysis
+
+Consider implementing automated sentiment analysis to:
+
+- Flag reviews with extreme negative sentiment for priority review
+- Detect sarcasm or misleading positive reviews
+- Identify genuine constructive criticism vs. malicious content
+- Generate property reputation scores beyond simple ratings
+
+### Machine Learning Integration
+
+<Tabs>
+  <Tab title="Classification">
+    Train models to automatically categorize reviews by topic (cleanliness, service, location, amenities).
+  </Tab>
+  
+  <Tab title="Spam Detection">
+    Use ML to identify spam patterns and flag suspicious reviews before publication.
+  </Tab>
+  
+  <Tab title="Quality Scoring">
+    Assign quality scores to reviews based on length, detail, and helpfulness indicators.
+  </Tab>
+</Tabs>
+
+### Reviewer Reputation System
+
+Track user review history to establish trust scores:
+
+```java
+// Example: Calculate user's review trustworthiness
+public double calculateReviewerTrustScore(String userDni) {
+    List<Review> userReviews = reviewRepository.findByUserDni(userDni);
+    
+    // Factors: number of reviews, consistency, verified stays, etc.
+    int reviewCount = userReviews.size();
+    double consistencyScore = calculateRatingConsistency(userReviews);
+    int verifiedStays = getVerifiedReservationCount(userDni);
+    
+    return (reviewCount * 0.3) + (consistencyScore * 0.4) + (verifiedStays * 0.3);
+}
+```
+
+## Compliance and Legal Considerations
+
+<Warning>
+Review moderation must balance platform safety with free speech principles. Consult legal counsel when developing moderation policies.
+</Warning>
+
+### Data Privacy
+
+- Store moderation logs securely with access controls
+- Redact personal information before archiving deleted content
+- Comply with GDPR/CCPA right-to-deletion requests
+- Maintain transparency in moderation decision-making
+
+### Liability Protection
+
+- Clearly state in Terms of Service that reviews are user opinions
+- Implement notice-and-takedown procedures for defamatory content
+- Document good-faith moderation efforts
+- Respond promptly to legal requests for content removal

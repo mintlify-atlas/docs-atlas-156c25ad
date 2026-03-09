@@ -1,0 +1,739 @@
+---
+title: Component Architecture
+description: Deep dive into Angular components, their structure, and usage in the Trippins platform
+---
+
+## Component Overview
+
+The Trippins frontend uses **13 main components** organized by feature. All components follow Angular's component architecture with decorators, templates, and lifecycle hooks.
+
+<CardGroup cols={3}>
+  <Card title="Layout Components" icon="layer-group">
+    Header, Footer
+  </Card>
+  <Card title="Public Components" icon="globe">
+    Index, About, Room, RoomDetails
+  </Card>
+  <Card title="Auth Components" icon="lock">
+    Login, Register, Profile
+  </Card>
+  <Card title="Admin Components" icon="user-shield">
+    Admin, HousingPanel, ReservationPanel
+  </Card>
+  <Card title="Feature Components" icon="plus">
+    NewHotel, Testimonials
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Error
+  </Card>
+</CardGroup>
+
+## Core Layout Components
+
+### Header Component
+
+The header provides navigation and displays user authentication state.
+
+<CodeGroup>
+
+```typescript src/app/components/header/header.component.ts
+import { Component, OnInit } from '@angular/core';
+import { AuthService } from '../../services/auth.service';
+import { Router } from '@angular/router';
+import { UserRole } from '../../models/DTOS/user-dto';
+
+@Component({
+  selector: 'app-header',
+  templateUrl: './header.component.html',
+  styleUrl: './header.component.css',
+  standalone: false
+})
+export class HeaderComponent {
+  constructor(
+    public authService: AuthService,
+    private router: Router
+  ) {}
+
+  get username(): string | null {
+    const token = this.authService.getJwt();
+    if (!token) return null;
+    
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub || payload.username || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  logout(): void {
+    this.authService.logout();
+    this.router.navigate(['new/login']);
+  }
+
+  isAdmin(): boolean {
+    return this.authService.hasRole('ROLE_ADMIN');
+  }
+
+  isUser(): boolean {
+    return this.authService.hasRole('ROLE_USER') || this.isAdmin();
+  }
+}
+```
+
+```html Template Usage
+<app-header></app-header>
+```
+
+</CodeGroup>
+
+<Accordion title="HeaderComponent Features">
+  - **JWT Parsing**: Extracts username from JWT token payload
+  - **Role Checking**: Shows/hides navigation items based on user roles
+  - **Logout**: Clears authentication and redirects to login
+  - **Public Access**: Available on all pages
+</Accordion>
+
+### Footer Component
+
+Simple presentational component for site footer.
+
+```typescript src/app/components/footer/footer.component.ts
+@Component({
+  selector: 'app-footer',
+  templateUrl: './footer.component.html',
+  styleUrl: './footer.component.css',
+  standalone: false
+})
+export class FooterComponent {
+  // Presentational component - no logic required
+}
+```
+
+## Public Components
+
+### Index Component (Landing Page)
+
+The homepage component - primarily template-driven.
+
+```typescript src/app/components/index/index.component.ts
+import { Component } from '@angular/core';
+
+@Component({
+  selector: 'app-index',
+  templateUrl: './index.component.html',
+  styleUrl: './index.component.css',
+  standalone: false
+})
+export class IndexComponent {
+  // Landing page - content in template
+}
+```
+
+### Room Component (Hotel Listing)
+
+Displays paginated hotel listings with search functionality.
+
+```typescript src/app/components/room/room.component.ts
+import { Component, OnInit } from '@angular/core';
+import { HousingDTO } from '../../models/DTOS/housing-dto';
+import { HousingServiceService } from '../../services/housing-service.service';
+
+interface SearchParams {
+  tags?: string;
+  stars?: number;
+}
+
+@Component({
+  selector: 'app-room',
+  templateUrl: './room.component.html',
+  styleUrl: './room.component.css',
+  standalone: false
+})
+export class RoomComponent implements OnInit {
+  houses: any[] = [];
+  currentPage = -1;
+  pageSize = 6;
+  isLoading = false;
+  hasMore = true;
+
+  searchParams: SearchParams = {
+    tags: '',
+    stars: 1
+  };
+
+  constructor(private houseService: HousingServiceService) {}
+
+  ngOnInit(): void {
+    this.loadHouses();
+  }
+
+  loadHouses(): void {
+    if (this.isLoading || !this.hasMore) return;
+
+    this.isLoading = true;
+    this.currentPage++;
+
+    this.houseService.getRooms(this.currentPage, this.pageSize).subscribe({
+      next: (response) => {
+        this.houses = [...this.houses, ...response.content];
+        this.hasMore = !response.last;
+        this.isLoading = false;
+      },
+      error: (err) => {
+        console.error('Error loading houses:', err);
+        this.isLoading = false;
+      }
+    });
+  }
+
+  onSearchSubmit(): void {
+    this.currentPage = 1;
+    this.houses = [];
+    
+    this.houseService.searchHouses(
+      this.searchParams.tags || '', 
+      this.searchParams.stars || 1
+    ).subscribe({
+      next: (houses) => {
+        this.houses = houses;
+      },
+      error: (error) => {
+        console.error('Search error:', error);
+      }
+    });
+  }
+}
+```
+
+<Accordion title="RoomComponent Features">
+  - **Infinite Scroll**: Loads more hotels as user scrolls
+  - **Pagination**: Uses Spring Boot pagination (`page`, `size`, `last`)
+  - **Search**: Filters by tags and star rating
+  - **Loading States**: Shows loading indicator during API calls
+  - **Error Handling**: Gracefully handles failed requests
+</Accordion>
+
+### RoomDetails Component
+
+Displays detailed hotel information with booking and review forms.
+
+<CodeGroup>
+
+```typescript Component Definition
+import { Component } from '@angular/core';
+import { FormGroup, FormBuilder, Validators } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
+import { AuthService } from '../../services/auth.service';
+import { HousingDTO } from '../../models/DTOS/housing-dto';
+import { ReviewDTO } from '../../models/DTOS/review-dto';
+import Swal from 'sweetalert2';
+
+@Component({
+  selector: 'app-room-details',
+  templateUrl: './room-details.component.html',
+  styleUrl: './room-details.component.css',
+  standalone: false
+})
+export class RoomDetailsComponent {
+  house: HousingDTO | null = null;
+  comments: ReviewDTO[] = [];
+  currentPage = 0;
+  isLoading = false;
+  clientDni: string | null = null;
+  clientName: string | null = null;
+
+  reservationForm: FormGroup;
+  commentForm: FormGroup;
+
+  constructor(
+    private route: ActivatedRoute,
+    private fb: FormBuilder,
+    public authService: AuthService,
+    private reservationService: ReservationServiceService,
+    private reviewService: ReviewServiceService,
+    private housingService: HousingServiceService
+  ) {
+    // Initialize forms with validation
+    this.reservationForm = this.fb.group({
+      checkIn: ['', Validators.required],
+      checkOut: ['', Validators.required]
+    });
+
+    this.commentForm = this.fb.group({
+      comment: ['', [Validators.required, Validators.minLength(10)]],
+      rating: [50, [Validators.required, Validators.min(0), Validators.max(100)]]
+    });
+  }
+
+  ngOnInit(): void {
+    const code = this.route.snapshot.paramMap.get('id');
+    if (code) {
+      const code2 = Number(code);
+      this.loadHouseDetails(code2);
+      this.loadComments(code2, this.currentPage);
+    }
+    
+    this.authService.getUserDni().subscribe(dni => {
+      this.clientDni = dni;
+    });
+    
+    this.authService.getUserName().subscribe(name => {
+      this.clientName = name;
+    });
+  }
+}
+```
+
+```typescript Reservation Submission
+onSubmitReservation(): void {
+  if (this.reservationForm.invalid || !this.house || !this.authService.isLoggedIn()) {
+    return;
+  }
+  
+  const reservationData = {
+    ...this.reservationForm.value,
+    housingCode: this.house.code,
+    housingName: this.house.name,
+    clientDni: this.clientDni,
+    valorated: false
+  };
+
+  this.reservationService.createReservation(reservationData).subscribe({
+    next: () => {
+      Swal.fire({
+        title: '¡Reserva exitosa! 🎉',
+        text: 'Tu reserva fue creada correctamente.',
+        icon: 'success',
+        confirmButtonText: '¡Genial!',
+        backdrop: true,
+        showClass: {
+          popup: 'animate__animated animate__fadeInDown'
+        },
+        hideClass: {
+          popup: 'animate__animated animate__fadeOutUp'
+        }
+      });
+      this.reservationForm.reset();
+    },
+    error: (err: any) => {
+      Swal.fire({
+        title: 'Oops 😬',
+        text: 'Hubo un error al crear la reserva.',
+        icon: 'error',
+        confirmButtonText: 'Intentar de nuevo'
+      });
+    }
+  });
+}
+```
+
+```typescript Review Submission
+onSubmitComment(): void {
+  if (this.commentForm.invalid || !this.house || !this.authService.isLoggedIn()) {
+    return;
+  }
+
+  const commentData = {
+    ...this.commentForm.value,
+    hotelCode: this.house.code,
+    userDni: this.clientDni,
+    userName: this.clientName
+  };
+
+  this.reviewService.createReview(commentData).subscribe({
+    next: () => {
+      Swal.fire({
+        title: 'Comentario creado de manera exitosa! 🎉',
+        icon: 'success'
+      });
+      this.commentForm.reset();
+      this.loadComments(this.house!.code, 1);
+    },
+    error: (err: any) => {
+      Swal.fire({
+        title: 'Oops 😬',
+        text: 'Hubo un error al crear el comentario.',
+        icon: 'error'
+      });
+    }
+  });
+}
+```
+
+</CodeGroup>
+
+<Info>
+**RoomDetailsComponent** uses **SweetAlert2** for user-friendly success and error notifications with animations.
+</Info>
+
+## Authentication Components
+
+### Login Component
+
+Reactive form for user authentication.
+
+```typescript src/app/components/login/login.component.ts
+import { Component } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { AuthService } from '../../services/auth.service';
+import { Router } from '@angular/router';
+
+@Component({
+  selector: 'app-login',
+  templateUrl: './login.component.html',
+  styleUrls: ['./login.component.scss'],
+  standalone: false
+})
+export class LoginComponent {
+  loginForm: FormGroup;
+  errorMessage: string = '';
+
+  constructor(
+    private fb: FormBuilder,
+    private authService: AuthService,
+    private router: Router
+  ) {
+    this.loginForm = this.fb.group({
+      email: ['', [Validators.required, Validators.email]],
+      password: ['', Validators.required]
+    });
+  }
+
+  onSubmit(): void {
+    if (this.loginForm.invalid) {
+      return;
+    }
+
+    const { email, password } = this.loginForm.value;
+    
+    this.authService.login({ email, password }).subscribe({
+      next: () => {
+        // Successful login - redirect to return URL or home
+        const returnUrl = this.router.parseUrl(this.router.url)
+          .queryParams['returnUrl'] || '/';
+        this.router.navigateByUrl(returnUrl);
+      },
+      error: (err) => {
+        this.errorMessage = 'Invalid email or password';
+        console.error('Login error:', err);
+      }
+    });
+  }
+}
+```
+
+<Accordion title="Login Features">
+  - **Reactive Forms**: Uses Angular's FormBuilder with validators
+  - **Email Validation**: Built-in email format validation
+  - **Return URL**: Redirects to intended page after login
+  - **Error Display**: Shows user-friendly error messages
+  - **JWT Storage**: Token stored by AuthService
+</Accordion>
+
+### Profile Component
+
+User profile management with reservation history.
+
+```typescript src/app/components/profile/profile.component.ts
+import { Component } from '@angular/core';
+import { FormGroup, FormBuilder, Validators } from '@angular/forms';
+import { AuthService } from '../../services/auth.service';
+import { UserDTO } from '../../models/DTOS/user-dto';
+import { ReservationDTO } from '../../models/DTOS/reservation-dto';
+
+@Component({
+  selector: 'app-profile',
+  templateUrl: './profile.component.html',
+  styleUrl: './profile.component.css',
+  standalone: false
+})
+export class ProfileComponent {
+  profileForm: FormGroup;
+  isEditing = false;
+  user: UserDTO | null = null;
+  reservations: ReservationDTO[] = [];
+  isLoading = true;
+
+  constructor(
+    private authService: AuthService,
+    private fb: FormBuilder,
+    private router: Router,
+    private userService: UserServiceService,
+    private reservationService: ReservationServiceService
+  ) {
+    this.profileForm = this.fb.group({
+      name: ['', Validators.required],
+      email: ['', [Validators.required, Validators.email]],
+      dni: ['', Validators.required],
+      number: ['', Validators.required],
+      password: ['', Validators.required]
+    });
+  }
+
+  toggleEdit(): void {
+    this.isEditing = !this.isEditing;
+    if (this.isEditing) {
+      this.profileForm.enable();
+      this.profileForm.get('dni')?.disable(); // DNI is immutable
+    } else {
+      this.profileForm.disable();
+    }
+  }
+
+  onSubmit(): void {
+    if (this.profileForm.invalid || !this.user) return;
+
+    const updatedUser = {
+      ...this.profileForm.value,
+      dni: this.user.dni,
+      roles: this.user.roles
+    };
+
+    this.userService.updateAccount(updatedUser, this.user.dni)
+      .subscribe({
+        next: () => {
+          this.isEditing = false;
+          this.profileForm.disable();
+          this.user = { ...this.user!, ...updatedUser };
+        },
+        error: (err) => {
+          console.error('Error updating user:', err);
+        }
+      });
+  }
+}
+```
+
+<Note>
+The **DNI field is disabled** during editing since it's the primary identifier and shouldn't be modified.
+</Note>
+
+## Admin Components
+
+### Admin Component
+
+Container component with tab-based navigation for admin panels.
+
+```typescript src/app/components/admin/admin.component.ts
+import { Component } from '@angular/core';
+import { ReservationDTO } from '../../models/DTOS/reservation-dto';
+import { HousingDTO } from '../../models/DTOS/housing-dto';
+
+@Component({
+  selector: 'app-admin',
+  templateUrl: './admin.component.html',
+  styleUrl: './admin.component.css',
+  standalone: false
+})
+export class AdminComponent {
+  activeTab: 'reservations' | 'houses' = 'reservations';
+
+  switchTab(tab: 'reservations' | 'houses') {
+    this.activeTab = tab;
+  }
+}
+```
+
+<Tip>
+The admin component uses **conditional rendering** to display either `ReservationPanelComponent` or `HousingPanelComponent` based on the active tab.
+</Tip>
+
+### NewHotel Component
+
+Form for creating new hotel listings (admin feature).
+
+```typescript src/app/components/newhotel/newhotel.component.ts
+@Component({
+  selector: 'app-newhotel',
+  templateUrl: './newhotel.component.html',
+  styleUrl: './newhotel.component.css',
+  standalone: false
+})
+export class NewhotelComponent {
+  // Form for creating new housing entries
+  // Uses HousingServiceService.createRoom()
+  // Uploads images via HousingServiceService.uploadHousingImage()
+}
+```
+
+## Component Communication Patterns
+
+### Parent-Child Communication
+
+<CodeGroup>
+
+```typescript Parent Component
+@Component({
+  selector: 'app-admin',
+  template: `
+    <app-reservation-panel *ngIf="activeTab === 'reservations'">
+    </app-reservation-panel>
+    <app-housing-panel *ngIf="activeTab === 'houses'">
+    </app-housing-panel>
+  `
+})
+export class AdminComponent {
+  activeTab: 'reservations' | 'houses' = 'reservations';
+}
+```
+
+```typescript Child Component with @Input
+@Component({
+  selector: 'app-housing-panel'
+})
+export class HousingPanelComponent {
+  @Input() filterCriteria: string;
+  
+  // Component receives data from parent
+}
+```
+
+```typescript Child Component with @Output
+@Component({
+  selector: 'app-reservation-panel'
+})
+export class ReservationPanelComponent {
+  @Output() reservationUpdated = new EventEmitter<ReservationDTO>();
+  
+  // Component emits events to parent
+  onUpdate(reservation: ReservationDTO) {
+    this.reservationUpdated.emit(reservation);
+  }
+}
+```
+
+</CodeGroup>
+
+### Service-Based Communication
+
+All components use services for shared state and data:
+
+```typescript
+export class RoomComponent {
+  // Inject shared services
+  constructor(
+    private houseService: HousingServiceService,
+    private authService: AuthService
+  ) {}
+  
+  // Services provide centralized data management
+  loadData() {
+    this.houseService.getRooms(0, 6).subscribe(/* ... */);
+  }
+}
+```
+
+## Form Patterns
+
+### Reactive Forms (Preferred)
+
+Used for complex forms with validation:
+
+```typescript
+export class LoginComponent {
+  loginForm: FormGroup;
+
+  constructor(private fb: FormBuilder) {
+    this.loginForm = this.fb.group({
+      email: ['', [Validators.required, Validators.email]],
+      password: ['', [Validators.required, Validators.minLength(6)]]
+    });
+  }
+
+  get email() {
+    return this.loginForm.get('email');
+  }
+
+  onSubmit() {
+    if (this.loginForm.valid) {
+      const formData = this.loginForm.value;
+      // Submit logic
+    }
+  }
+}
+```
+
+### Template-Driven Forms
+
+Used for simpler forms:
+
+```html
+<form #searchForm="ngForm" (ngSubmit)="onSearch(searchForm)">
+  <input name="tags" [(ngModel)]="searchParams.tags">
+  <input name="stars" [(ngModel)]="searchParams.stars" type="number">
+  <button type="submit">Search</button>
+</form>
+```
+
+## Component Lifecycle Hooks
+
+Common lifecycle hooks used across components:
+
+| Hook | Usage | Example |
+|------|-------|---------|
+| `ngOnInit()` | Initialize data on component load | Loading hotels, user data |
+| `ngOnDestroy()` | Cleanup subscriptions | Unsubscribing from observables |
+| `ngOnChanges()` | React to input property changes | Child components with @Input |
+
+<Warning>
+Always **unsubscribe from observables** in `ngOnDestroy()` to prevent memory leaks. Consider using the `async` pipe in templates for automatic subscription management.
+</Warning>
+
+## Error Handling Component
+
+```typescript src/app/components/error/error.component.ts
+@Component({
+  selector: 'app-error',
+  templateUrl: './error.component.html',
+  styleUrl: './error.component.css',
+  standalone: false
+})
+export class ErrorComponent {
+  // Displays 404 or error pages
+  // Rendered when route not found or authorization fails
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Component Structure">
+    - Keep components focused on a single responsibility
+    - Extract reusable logic into services
+    - Use smart/dumb component pattern (container/presentation)
+    - Limit template complexity
+  </Accordion>
+
+  <Accordion title="State Management">
+    - Use services for shared state
+    - Keep component state minimal
+    - Avoid direct DOM manipulation
+    - Use RxJS for reactive patterns
+  </Accordion>
+
+  <Accordion title="Performance">
+    - Use `OnPush` change detection where possible
+    - Implement lazy loading for large components
+    - Unsubscribe from observables in `ngOnDestroy`
+    - Use `trackBy` with `*ngFor` for lists
+  </Accordion>
+
+  <Accordion title="Type Safety">
+    - Define interfaces for all data structures
+    - Use TypeScript strict mode
+    - Avoid `any` type
+    - Leverage Angular's built-in types
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Routing Configuration" icon="route" href="/frontend/routing">
+    Learn about route guards and navigation
+  </Card>
+  <Card title="Angular Services" icon="server" href="/frontend/services">
+    Explore service layer and HTTP communication
+  </Card>
+</CardGroup>

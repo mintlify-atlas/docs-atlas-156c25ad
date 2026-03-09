@@ -1,80 +1,299 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get Trippins running locally in minutes'
 ---
 
-## Get started in three steps
+Trippins is a full-stack hotel booking platform built with Spring Boot and Angular. This guide will help you set up and run the application on your local machine.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+Before you begin, ensure you have the following installed:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Java Development Kit" icon="java">
+    JDK 21 is required for the Spring Boot backend
+  </Card>
+  <Card title="MySQL Database" icon="database">
+    MySQL 8.0.33 for data persistence
+  </Card>
+  <Card title="Node.js & npm" icon="node">
+    For building and running the Angular frontend
+  </Card>
+  <Card title="Docker" icon="docker">
+    Optional but recommended for easy database setup
+  </Card>
 </CardGroup>
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  Maven is used for backend dependency management and will be automatically handled by the Spring Boot Maven wrapper.
 </Note>
+
+## Clone the Repository
+
+Start by cloning the Trippins repository:
+
+```bash
+git clone https://github.com/CodeURJC-DAW-2024-25/webapp09.git
+cd webapp09/TrippinsApp
+```
+
+## Database Setup
+
+You have two options for setting up the MySQL database:
+
+<Tabs>
+  <Tab title="Docker (Recommended)">
+    The easiest way to set up MySQL is using Docker:
+
+    ```bash
+    docker run --rm \
+      -e MYSQL_ROOT_PASSWORD=1234 \
+      -e MYSQL_DATABASE=Trippins \
+      -p 3307:3306 \
+      -d mysql:8.0.33
+    ```
+
+    This command:
+    - Creates a MySQL container with root password `1234`
+    - Creates a database named `Trippins`
+    - Maps port 3307 on your host to port 3306 in the container
+    - Uses MySQL version 8.0.33
+  </Tab>
+  
+  <Tab title="Local MySQL">
+    If you have MySQL installed locally:
+
+    1. Start your MySQL service
+    2. Create the Trippins database:
+
+    ```sql
+    CREATE DATABASE Trippins;
+    ```
+
+    3. Update `backend/src/main/resources/application.properties`:
+
+    ```properties
+    spring.datasource.url=jdbc:mysql://localhost:3306/Trippins
+    spring.datasource.username=root
+    spring.datasource.password=your_password
+    ```
+  </Tab>
+</Tabs>
+
+## Backend Setup
+
+The backend is built with Spring Boot and provides a RESTful API with JWT authentication.
+
+<Steps>
+  <Step title="Navigate to backend directory">
+    ```bash
+    cd backend
+    ```
+  </Step>
+
+  <Step title="Install dependencies and build">
+    Using Maven wrapper (no Maven installation required):
+
+    ```bash
+    ./mvnw clean install
+    ```
+
+    <Note>
+      On Windows, use `mvnw.cmd` instead of `./mvnw`
+    </Note>
+  </Step>
+
+  <Step title="Run the application">
+    ```bash
+    ./mvnw spring-boot:run
+    ```
+
+    The backend will start on HTTPS port 8443. You can access:
+    - API endpoint: `https://localhost:8443`
+    - API documentation: `https://localhost:8443/swagger-ui.html`
+  </Step>
+</Steps>
+
+<Warning>
+  The application uses a self-signed SSL certificate. Your browser will show a security warning - this is expected for local development. Click "Advanced" and proceed to localhost.
+</Warning>
+
+### Verify Backend
+
+Once running, the backend will automatically:
+- Create database tables based on JPA entities
+- Initialize sample hotel data (15+ hotels)
+- Create default tags (Beach, City, River)
+- Set up JWT authentication
+
+Test the API is working:
+
+```bash
+curl -k https://localhost:8443/v1/api/houses
+```
+
+## Frontend Setup
+
+The frontend is an Angular 17 single-page application with Bootstrap 5 styling.
+
+<Steps>
+  <Step title="Navigate to frontend directory">
+    Open a new terminal window:
+
+    ```bash
+    cd TrippinsApp/frontend
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+
+    This installs all required packages including:
+    - Angular 17
+    - Bootstrap 5.3.5
+    - Font Awesome icons
+    - JWT authentication library
+    - SweetAlert2 for notifications
+  </Step>
+
+  <Step title="Start the development server">
+    ```bash
+    npm start
+    ```
+
+    Or explicitly:
+
+    ```bash
+    ng serve
+    ```
+
+    The Angular development server will start on `http://localhost:4200`
+  </Step>
+</Steps>
+
+## Access the Application
+
+<CardGroup cols={2}>
+  <Card title="Frontend" icon="browser" href="http://localhost:4200">
+    Open your browser to http://localhost:4200
+  </Card>
+  <Card title="API Docs" icon="book" href="https://localhost:8443/swagger-ui.html">
+    View API documentation at https://localhost:8443/swagger-ui.html
+  </Card>
+</CardGroup>
+
+## Test Users
+
+The application initializes with sample data. You can create new users or use the admin panel to manage reservations.
+
+### Register a New User
+
+1. Navigate to http://localhost:4200
+2. Click "Register" or "Crear cuenta"
+3. Fill in the registration form:
+   - DNI (Spanish ID): 9 characters
+   - Name: Your username (unique)
+   - Phone number: 9 digits
+   - Email: Must be unique
+   - Password: Your password
+
+### Admin Access
+
+To test admin features, you'll need to manually set a user's `admin` field to `true` in the database, or register and modify via SQL:
+
+```sql
+UPDATE User SET is_admin = true WHERE email = 'your@email.com';
+```
+
+Admin users can:
+- Approve or reject housing requests
+- View and manage all reservations
+- Access the admin panel at `/admin`
+
+## Docker Compose (Full Stack)
+
+For production-like deployment, use Docker Compose:
+
+<Steps>
+  <Step title="Navigate to docker directory">
+    ```bash
+    cd TrippinsApp/docker
+    ```
+  </Step>
+
+  <Step title="Build and start all services">
+    ```bash
+    docker-compose up
+    ```
+
+    This starts:
+    - MySQL database on port 3307
+    - Spring Boot backend with Angular frontend on HTTPS port 443
+  </Step>
+
+  <Step title="Access the application">
+    Open your browser to `https://localhost`
+  </Step>
+</Steps>
+
+<Note>
+  The Docker Compose setup includes both frontend and backend in a single container, exposed on port 443 for HTTPS access.
+</Note>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="sitemap" href="/architecture">
+    Learn about the system architecture and how components interact
+  </Card>
+  <Card title="API Reference" icon="code" href="/api-reference">
+    Explore the complete REST API documentation
+  </Card>
+  <Card title="Authentication" icon="lock" href="/authentication">
+    Understand JWT authentication and authorization
+  </Card>
+  <Card title="Deployment" icon="rocket" href="/deployment">
+    Deploy Trippins to production
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Port Already in Use
+
+If port 8443 or 4200 is already in use:
+
+```bash
+# Find process using port 8443
+lsof -i :8443
+
+# Kill the process
+kill -9 <PID>
+```
+
+### Database Connection Failed
+
+Ensure MySQL is running and accessible:
+
+```bash
+# Check if Docker container is running
+docker ps
+
+# Check MySQL logs
+docker logs <container_id>
+```
+
+### Angular Build Errors
+
+Clear npm cache and reinstall:
+
+```bash
+rm -rf node_modules package-lock.json
+npm install
+```
+
+### SSL Certificate Warnings
+
+The application uses a self-signed certificate (`keystore.jks`). For local development, you can safely ignore browser warnings. For production, replace with a valid SSL certificate.

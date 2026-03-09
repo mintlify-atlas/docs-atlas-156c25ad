@@ -1,0 +1,533 @@
+---
+title: 'Making Reservations'
+description: 'Step-by-step guide to booking accommodations on the Trippins platform'
+---
+
+## Overview
+
+Making a reservation on Trippins is a straightforward process that allows registered users to book accommodations for specific dates. This guide covers the complete reservation workflow, from browsing properties to confirming your booking.
+
+<Warning>
+  You must be logged in to make reservations. Anonymous users need to register or log in first.
+</Warning>
+
+## Prerequisites
+
+Before making a reservation, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="User Account" icon="user">
+    Register and log in to the platform
+  </Card>
+  <Card title="JWT Token" icon="key">
+    Valid authentication token stored
+  </Card>
+  <Card title="Property Selected" icon="hotel">
+    Navigate to a specific property detail page
+  </Card>
+  <Card title="Available Dates" icon="calendar">
+    Know your check-in and check-out dates
+  </Card>
+</CardGroup>
+
+## Reservation Data Structure
+
+Each reservation contains the following information:
+
+<CodeGroup>
+```typescript TypeScript Interface
+interface ReservationDTO {
+  id?: number;           // Auto-generated
+  checkIn: Date;         // Check-in date
+  checkOut: Date;        // Check-out date
+  valorated: boolean;    // Has user reviewed?
+  clientDni: string;     // User's DNI
+  housingCode: number;   // Property code
+  housingName: string;   // Property name
+}
+```
+
+```java Java DTO
+public class ReservationDTO {
+    @Schema(accessMode = AccessMode.READ_ONLY)
+    private Integer id;
+    
+    private Date checkIn;
+    private Date checkOut;
+    private boolean valorated;
+    private String clientDni;      // From User entity
+    private int housingCode;       // From Housing entity
+    private String housingName;
+}
+```
+</CodeGroup>
+
+## Making a Reservation
+
+### Step-by-Step Process
+
+<Steps>
+  <Step title="Navigate to property details">
+    Go to `/room/{code}` to view a specific property
+  </Step>
+  <Step title="Fill reservation form">
+    Enter check-in and check-out dates in the booking form
+  </Step>
+  <Step title="Submit reservation">
+    Click the booking button to create your reservation
+  </Step>
+  <Step title="Confirmation">
+    Receive success notification with booking details
+  </Step>
+</Steps>
+
+### Reservation Form Component
+
+```typescript
+@Component({
+  selector: 'app-room-details',
+  templateUrl: './room-details.component.html'
+})
+export class RoomDetailsComponent {
+  reservationForm: FormGroup;
+  clientDni: string | null = null;
+
+  constructor(
+    private fb: FormBuilder,
+    public authService: AuthService,
+    private reservationService: ReservationServiceService
+  ) {
+    this.reservationForm = this.fb.group({
+      checkIn: ['', Validators.required],
+      checkOut: ['', Validators.required]
+    });
+  }
+
+  ngOnInit(): void {
+    // Get current user's DNI
+    this.authService.getUserDni().subscribe(dni => {
+      this.clientDni = dni;
+    });
+  }
+}
+```
+
+### Form Validation
+
+The reservation form validates:
+
+<AccordionGroup>
+  <Accordion title="Required Fields">
+    Both check-in and check-out dates are mandatory fields
+  </Accordion>
+  
+  <Accordion title="Date Logic">
+    Check-out date should be after check-in date (implement custom validator)
+  </Accordion>
+  
+  <Accordion title="Authentication">
+    User must be logged in (`authService.isLoggedIn()`)
+  </Accordion>
+  
+  <Accordion title="Property Selection">
+    A valid housing property must be selected
+  </Accordion>
+</AccordionGroup>
+
+### Submitting the Reservation
+
+```typescript
+onSubmitReservation(): void {
+  // Validate form and authentication
+  if (this.reservationForm.invalid || !this.house || !this.authService.isLoggedIn()) {
+    return;
+  }
+
+  // Prepare reservation data
+  const reservationData = {
+    ...this.reservationForm.value,
+    housingCode: this.house.code,
+    housingName: this.house.name,
+    clientDni: this.clientDni,
+    valorated: false  // Initially not reviewed
+  };
+
+  // Submit to API
+  this.reservationService.createReservation(reservationData).subscribe({
+    next: () => {
+      Swal.fire({
+        title: '¡Reserva exitosa! 🎉',
+        text: 'Tu reserva fue creada correctamente.',
+        icon: 'success',
+        confirmButtonText: '¡Genial!'
+      });
+      this.reservationForm.reset();
+    },
+    error: (err: any) => {
+      console.error('Error creating reservation:', err);
+      Swal.fire({
+        title: 'Oops 😬',
+        text: 'Hubo un error al crear la reserva.',
+        icon: 'error',
+        confirmButtonText: 'Intentar de nuevo'
+      });
+    }
+  });
+}
+```
+
+<Note>
+  The `valorated` field tracks whether the user has written a review for this reservation. It's initially set to `false` and updated to `true` after submitting a review.
+</Note>
+
+## API Endpoints
+
+### Create Reservation
+
+<Card title="POST /v1/api/reservations" icon="calendar-plus">
+  Create a new reservation (requires authentication)
+</Card>
+
+<ParamField body="checkIn" type="Date" required>
+  Check-in date in SQL date format (YYYY-MM-DD)
+</ParamField>
+
+<ParamField body="checkOut" type="Date" required>
+  Check-out date in SQL date format (YYYY-MM-DD)
+</ParamField>
+
+<ParamField body="clientDni" type="string" required>
+  User's DNI from authenticated session
+</ParamField>
+
+<ParamField body="housingCode" type="number" required>
+  Property code to reserve
+</ParamField>
+
+<ParamField body="housingName" type="string" required>
+  Property name for reference
+</ParamField>
+
+<ParamField body="valorated" type="boolean" default="false">
+  Review status (always false on creation)
+</ParamField>
+
+```bash
+curl -X POST http://localhost:8080/v1/api/reservations \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "checkIn": "2026-06-01",
+    "checkOut": "2026-06-05",
+    "clientDni": "12345678A",
+    "housingCode": 5,
+    "housingName": "Ocean View Resort",
+    "valorated": false
+  }'
+```
+
+### Backend Controller
+
+```java
+@RestController
+@RequestMapping("/v1/api/reservations")
+@Tag(name = "Reservation Management")
+public class ReservationRestController {
+
+    @Autowired
+    private ReservationService reservationService;
+
+    @Operation(summary = "Create a new reservation")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Reservation created successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid input"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Access denied")
+    })
+    @SecurityRequirement(name = "JWT")
+    @PostMapping
+    public ResponseEntity<ReservationDTO> createReservation(
+        @RequestBody ReservationDTO reservation) {
+        ReservationDTO createdReservation = reservationService.createReservation(reservation);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdReservation);
+    }
+}
+```
+
+## Managing Reservations
+
+### View All Reservations (Admin)
+
+<Card title="GET /v1/api/reservations" icon="list">
+  Retrieve all reservations (admin only)
+</Card>
+
+```bash
+curl http://localhost:8080/v1/api/reservations \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+### Get Specific Reservation
+
+<Card title="GET /v1/api/reservations/{id}" icon="file-lines">
+  Get details of a specific reservation
+</Card>
+
+```bash
+curl http://localhost:8080/v1/api/reservations/42 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```java
+@GetMapping("/{id}")
+@SecurityRequirement(name = "JWT")
+public ResponseEntity<ReservationDTO> getReservationById(@PathVariable Integer id) {
+    ReservationDTO reservation = reservationService.getReservationById(id);
+    return ResponseEntity.ok(reservation);
+}
+```
+
+### Update Reservation
+
+<Card title="PUT /v1/api/reservations/{id}" icon="pen-to-square">
+  Modify an existing reservation
+</Card>
+
+```bash
+curl -X PUT http://localhost:8080/v1/api/reservations/42 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "checkIn": "2026-06-02",
+    "checkOut": "2026-06-06",
+    "clientDni": "12345678A",
+    "housingCode": 5,
+    "housingName": "Ocean View Resort",
+    "valorated": false
+  }'
+```
+
+<Warning>
+  Modifying reservations should be done carefully. Consider implementing business rules such as:
+  - Only allow updates before check-in date
+  - Send notification emails on changes
+  - Log all modifications for audit purposes
+</Warning>
+
+### Cancel Reservation
+
+<Card title="DELETE /v1/api/reservations/{id}" icon="trash">
+  Cancel/delete a reservation
+</Card>
+
+```bash
+curl -X DELETE http://localhost:8080/v1/api/reservations/42 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```java
+@DeleteMapping("/{id}")
+@SecurityRequirement(name = "JWT")
+public ResponseEntity<Void> deleteUser(@PathVariable Integer id) {
+    reservationService.deleteReservation(id);
+    return ResponseEntity.noContent().build();
+}
+```
+
+## Reservation Entity Relationships
+
+The reservation entity connects three key entities:
+
+```java
+public class Reservation {
+    private Integer id;
+    private Date check_in;
+    private Date check_out;
+    private boolean valorated;
+    
+    // Foreign key relationships
+    private User ID_cliente;      // Link to User (Client)
+    private Housing housing;      // Link to Housing property
+}
+```
+
+<Note>
+  The DTO uses simplified fields (`clientDni` and `housingCode`) instead of full entity objects for easier JSON serialization.
+</Note>
+
+## User Flow Example
+
+### Complete Booking Journey
+
+<Steps>
+  <Step title="Browse properties">
+    User searches for hotels in `/room` page
+  </Step>
+  <Step title="Select property">
+    Clicks on "Ocean View Resort" to see details
+  </Step>
+  <Step title="Check authentication">
+    System verifies user is logged in, redirects to login if needed
+  </Step>
+  <Step title="Enter dates">
+    Fills form: Check-in (2026-06-01), Check-out (2026-06-05)
+  </Step>
+  <Step title="Submit booking">
+    Clicks "Book Now" button
+  </Step>
+  <Step title="API call">
+    Frontend sends POST request with JWT token
+  </Step>
+  <Step title="Server validation">
+    Backend validates dates, user, and property existence
+  </Step>
+  <Step title="Create reservation">
+    Database record created with auto-generated ID
+  </Step>
+  <Step title="Success feedback">
+    User sees success message with booking confirmation
+  </Step>
+  <Step title="Post-booking">
+    User can later write a review (sets `valorated: true`)
+  </Step>
+</Steps>
+
+## Retrieving User Information
+
+The frontend retrieves the current user's DNI for reservation creation:
+
+```typescript
+getUserDni(): Observable<string | null> {
+  const usernameemail = this.getUsername();
+  
+  return this.http.get<UserDTO[]>(`${environment.baseUrlApi}/users`).pipe(
+    map(users => {
+      const user = users.find(u => u.email === usernameemail);
+      return user ? user.dni : null;
+    }),
+    catchError(err => {
+      console.error('Error loading user data:', err);
+      return of(null);
+    })
+  );
+}
+```
+
+<Tip>
+  For better performance, consider caching user information after login instead of fetching the entire user list each time.
+</Tip>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Date Validation">
+    Always validate that check-out is after check-in:
+    ```typescript
+    const checkInDate = new Date(this.reservationForm.value.checkIn);
+    const checkOutDate = new Date(this.reservationForm.value.checkOut);
+    
+    if (checkOutDate <= checkInDate) {
+      // Show error message
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Availability Check">
+    Before creating a reservation, verify the property is available for the selected dates (implement on backend).
+  </Accordion>
+  
+  <Accordion title="Price Calculation">
+    Display total price based on number of nights and property's nightly rate:
+    ```typescript
+    const nights = Math.ceil(
+      (checkOutDate - checkInDate) / (1000 * 60 * 60 * 24)
+    );
+    const totalPrice = nights * this.house.price;
+    ```
+  </Accordion>
+  
+  <Accordion title="Email Confirmation">
+    Send confirmation email to user after successful reservation (implement in backend service).
+  </Accordion>
+  
+  <Accordion title="Conflict Prevention">
+    Implement pessimistic locking or optimistic concurrency control to prevent double bookings.
+  </Accordion>
+</AccordionGroup>
+
+## Error Handling
+
+### Common Errors and Solutions
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized">
+    **Cause**: User not logged in or JWT token expired
+    
+    **Solution**: Redirect to login page, then return to reservation after authentication
+  </Accordion>
+  
+  <Accordion title="400 Bad Request">
+    **Cause**: Invalid date format or missing required fields
+    
+    **Solution**: Validate form data before submission, show specific field errors
+  </Accordion>
+  
+  <Accordion title="404 Not Found">
+    **Cause**: Housing property doesn't exist or was deleted
+    
+    **Solution**: Verify property exists before showing booking form
+  </Accordion>
+  
+  <Accordion title="403 Forbidden">
+    **Cause**: User doesn't have permission (e.g., trying to modify someone else's reservation)
+    
+    **Solution**: Implement proper authorization checks on backend
+  </Accordion>
+</AccordionGroup>
+
+## Linking Reservations to Reviews
+
+The `valorated` field creates a relationship between reservations and reviews:
+
+```typescript
+// After check-out, users can write reviews
+if (reservation.valorated === false && isPastCheckOut(reservation.checkOut)) {
+  // Show "Write a Review" button
+}
+
+// When review is submitted, update reservation
+onSubmitReview(): void {
+  this.reviewService.createReview(reviewData).subscribe({
+    next: () => {
+      // Update the valorated flag
+      this.reservationService.updateReservation(reservationId, {
+        ...reservation,
+        valorated: true
+      }).subscribe();
+    }
+  });
+}
+```
+
+<Note>
+  This prevents users from reviewing the same reservation multiple times and helps track which stays have been reviewed.
+</Note>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Learn how to log in before making reservations
+  </Card>
+  
+  <Card title="Browsing Housing" icon="hotel" href="/guides/browsing-housing">
+    Find the perfect property to book
+  </Card>
+  
+  <Card title="Writing Reviews" icon="star" href="/guides/writing-reviews">
+    Share your experience after your stay
+  </Card>
+  
+  <Card title="User Roles" icon="users" href="/guides/user-roles">
+    Understand user permissions for reservations
+  </Card>
+</CardGroup>

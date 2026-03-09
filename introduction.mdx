@@ -1,0 +1,103 @@
+---
+title: "Welcome to Trippins"
+description: "Your hotel and accommodation booking platform with powerful features for users and administrators"
+---
+
+<div style={{
+  background: 'linear-gradient(135deg, #e78920 0%, #752470 100%)',
+  padding: '48px 32px',
+  borderRadius: '8px',
+  color: 'white',
+  marginBottom: '32px'
+}}>
+  <h1 style={{ color: 'white', fontSize: '42px', marginBottom: '16px', fontWeight: '700' }}>
+    Trippins
+  </h1>
+  <p style={{ fontSize: '18px', opacity: 0.95, maxWidth: '700px' }}>
+    A complete hotel and accommodation booking platform with user authentication, reservations, reviews, and comprehensive admin management.
+  </p>
+</div>
+
+## What is Trippins?
+
+Trippins is a full-stack SaaS platform that enables users to browse, search, and book hotel accommodations. Built with Spring Boot and Angular, it provides a modern, secure booking experience with powerful administrative tools for managing properties and reservations.
+
+## Key Features
+
+<CardGroup cols={2}>
+  <Card title="User Authentication" icon="lock" href="/guides/authentication">
+    Secure JWT-based authentication with role-based access control
+  </Card>
+  <Card title="Browse & Search" icon="magnifying-glass" href="/guides/browsing-housing">
+    Advanced tag-based search to find the perfect accommodation
+  </Card>
+  <Card title="Reservations" icon="calendar-check" href="/guides/making-reservations">
+    Simple booking flow with email confirmations
+  </Card>
+  <Card title="Reviews & Ratings" icon="star" href="/guides/writing-reviews">
+    Share experiences and read feedback from other travelers
+  </Card>
+  <Card title="Admin Panel" icon="shield" href="/admin/managing-housing">
+    Comprehensive tools for managing properties and reservations
+  </Card>
+  <Card title="Email Notifications" icon="envelope" href="/deployment/configuration">
+    Automated booking confirmations and updates
+  </Card>
+</CardGroup>
+
+## Technology Stack
+
+Trippins is built with modern technologies designed for scalability and performance:
+
+- **Backend**: Spring Boot 3.4.3 with Java 17
+- **Frontend**: Angular 17 with TypeScript
+- **Database**: MySQL 8.0.33
+- **Authentication**: JWT tokens with Spring Security
+- **API Documentation**: OpenAPI 3.1 with Swagger UI
+- **Deployment**: Docker and Docker Compose
+
+## User Roles
+
+Trippins supports three distinct user roles:
+
+<Accordion title="Anonymous Users">
+  Anonymous users can browse available accommodations and read reviews, but cannot make reservations or write reviews. Perfect for exploring what Trippins has to offer before signing up.
+</Accordion>
+
+<Accordion title="Registered Users">
+  Registered users have full access to the platform. They can search for accommodations, make reservations, write reviews, and receive personalized recommendations based on their booking history.
+</Accordion>
+
+<Accordion title="Administrators">
+  Administrators manage the platform, including approving or rejecting housing listings, moderating reviews, managing user reservations, and accessing platform analytics.
+</Accordion>
+
+## Getting Started
+
+Ready to explore Trippins? Follow our quickstart guide to set up your local development environment or deploy to production.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Get Trippins running locally in minutes
+  </Card>
+  <Card title="Architecture Overview" icon="sitemap" href="/architecture">
+    Understand how Trippins is structured
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/introduction">
+    Explore the REST API endpoints
+  </Card>
+  <Card title="Deploy with Docker" icon="docker" href="/deployment/docker">
+    Deploy Trippins to production
+  </Card>
+</CardGroup>
+
+## Support
+
+Need help? Check out our documentation or reach out to the development team:
+
+- **GitHub Repository**: [CodeURJC-DAW-2024-25/webapp09](https://github.com/CodeURJC-DAW-2024-25/webapp09)
+- **Email**: trippins.urjc@gmail.com
+
+<Note>
+  Trippins is an academic project developed at Universidad Rey Juan Carlos. It demonstrates modern web application architecture with a focus on security, scalability, and user experience.
+</Note>

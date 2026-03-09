@@ -1,0 +1,457 @@
+---
+title: 'Browsing Housing'
+description: 'Discover how to browse, search, and filter hotel accommodations on the Trippins platform'
+---
+
+## Overview
+
+Trippins provides a comprehensive browsing experience for finding the perfect accommodation. Whether you're looking for a budget-friendly option or a luxury hotel, the platform offers multiple ways to discover and filter housing options.
+
+## Accessing the Housing Catalog
+
+The housing catalog is publicly accessible - you don't need to be logged in to browse available accommodations.
+
+<Card title="Navigate to /room" icon="building">
+  View all available accommodations in the platform
+</Card>
+
+```typescript
+@Component({
+  selector: 'app-room',
+  templateUrl: './room.component.html'
+})
+export class RoomComponent implements OnInit {
+  houses: any[] = [];
+  currentPage = -1;
+  pageSize = 6;
+  isLoading = false;
+  hasMore = true;
+
+  ngOnInit(): void {
+    this.loadHouses();
+  }
+}
+```
+
+## Housing Data Structure
+
+Each housing listing contains the following information:
+
+<CodeGroup>
+```typescript TypeScript Interface
+interface HousingDTO {
+  code: number;            // Unique identifier
+  location: string;        // City/address
+  name: string;           // Hotel name
+  imageBase64: string;    // Property image
+  price: number;          // Price per night
+  description: string;    // Full description
+  stars: number;          // Star rating (1-5)
+  acepted: boolean;       // Admin approval status
+  tags: Tag[];           // Feature tags
+}
+```
+
+```java Java DTO
+public class HousingDTO {
+    private int code;              // Auto-generated ID
+    private String location;       
+    private String name;           
+    private String imageBase64;    // Base64 encoded image
+    private Integer price;         
+    private String description;    
+    private Integer stars;         // 1 to 5 stars
+    private Boolean acepted;       // Must be true to display
+    private Set<Tag> tags;         // Pool, WiFi, Parking, etc.
+}
+```
+</CodeGroup>
+
+## Pagination
+
+### Infinite Scroll Loading
+
+The housing list uses pagination to load properties efficiently:
+
+```typescript
+loadHouses(): void {
+  if (this.isLoading || !this.hasMore) return;
+
+  this.isLoading = true;
+  this.currentPage++;
+
+  this.houseService.getRooms(this.currentPage, this.pageSize).subscribe({
+    next: (response) => {
+      // Append new properties to existing list
+      this.houses = [...this.houses, ...response.content];
+      
+      // Check if more pages are available
+      this.hasMore = !response.last;
+      this.isLoading = false;
+    },
+    error: (err) => {
+      console.error('Error loading houses:', err);
+      this.isLoading = false;
+    }
+  });
+}
+```
+
+### API Endpoint for Pagination
+
+<Card title="GET /v1/api/houses" icon="list">
+  Retrieve paginated list of housing properties
+</Card>
+
+<ParamField query="page" type="number" default="0">
+  Page number (zero-indexed)
+</ParamField>
+
+<ParamField query="size" type="number" default="6">
+  Number of items per page
+</ParamField>
+
+```bash
+# Get first page with 6 items
+curl http://localhost:8080/v1/api/houses?page=0&size=6
+
+# Response format
+{
+  "content": [...],      // Array of housing items
+  "totalElements": 42,   // Total number of houses
+  "totalPages": 7,       // Total number of pages
+  "size": 6,            // Items per page
+  "number": 0,          // Current page number
+  "last": false         // Is this the last page?
+}
+```
+
+<Note>
+  The default page size is 6 properties, optimized for grid display with 2 columns on desktop and 1 column on mobile.
+</Note>
+
+## Search Functionality
+
+### Search by Tags and Stars
+
+Users can filter accommodations using two parameters:
+
+```typescript
+interface SearchParams {
+  tags?: string;      // Comma-separated tag names
+  stars?: number;     // Minimum star rating (1-5)
+}
+
+onSearchSubmit(): void {
+  this.currentPage = 1;
+  this.houses = [];
+  
+  // Call search with both parameters
+  this.houseService.searchHouses(
+    this.searchParams.tags || '', 
+    this.searchParams.stars || 1
+  ).subscribe({
+    next: (houses) => {
+      this.houses = houses;
+    },
+    error: (error) => {
+      console.error('Search error:', error);
+    }
+  });
+}
+```
+
+### Available Search Tags
+
+Common property tags include:
+
+<CardGroup cols={3}>
+  <Card title="Pool" icon="water-ladder">
+    Swimming pool available
+  </Card>
+  <Card title="WiFi" icon="wifi">
+    Free wireless internet
+  </Card>
+  <Card title="Parking" icon="square-parking">
+    On-site parking
+  </Card>
+  <Card title="Breakfast" icon="mug-saucer">
+    Breakfast included
+  </Card>
+  <Card title="Gym" icon="dumbbell">
+    Fitness center access
+  </Card>
+  <Card title="Pet Friendly" icon="paw">
+    Pets allowed
+  </Card>
+</CardGroup>
+
+### Search API Endpoint
+
+<Card title="GET /v1/api/query" icon="magnifying-glass">
+  Advanced search with tags and star filtering
+</Card>
+
+```bash
+# Search for hotels with pool and WiFi, minimum 4 stars
+curl "http://localhost:8080/v1/api/query?tags=Pool,WiFi&stars=4"
+
+# Search by stars only
+curl "http://localhost:8080/v1/api/query?stars=5"
+
+# Search by tags only
+curl "http://localhost:8080/v1/api/query?tags=Parking,Breakfast"
+```
+
+<Tip>
+  Tags are case-sensitive. Make sure to use exact tag names as they appear in the database.
+</Tip>
+
+## Viewing Property Details
+
+### Navigation to Detail Page
+
+Click on any property to view full details:
+
+```typescript
+// Navigate to room details page
+this.router.navigate(['/room', houseCode]);
+```
+
+### Loading Specific Property
+
+```typescript
+loadHouseDetails(code: number): void {
+  this.housingService.getSpecificRoom(code).subscribe({
+    next: (house: any) => {
+      this.house = {
+        ...house,
+        image: `${environment.baseUrlApi}/houses/${code}/image`
+      };
+    },
+    error: (err: any) => {
+      console.error('Error loading house details:', err);
+    }
+  });
+}
+```
+
+### Property Detail API
+
+<Card title="GET /v1/api/houses/{id}" icon="hotel">
+  Get detailed information for a specific property
+</Card>
+
+```bash
+# Get details for house with code 5
+curl http://localhost:8080/v1/api/houses/5 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+<Note>
+  Viewing property details requires authentication. Anonymous users must log in or register to see full property information.
+</Note>
+
+## Property Images
+
+### Image Storage and Retrieval
+
+Images are stored as Base64-encoded strings in the database but served via a dedicated endpoint:
+
+```java
+public class HousingDTO {
+    @JsonIgnore
+    private String imageBase64; // Not included in JSON response
+    
+    private transient MultipartFile image;
+    
+    public String convertToBase64(MultipartFile image) throws IOException {
+        String base64Image = Base64.getEncoder().encodeToString(image.getBytes());
+        return base64Image;
+    }
+}
+```
+
+### Image Endpoint
+
+<Card title="GET /v1/api/houses/{id}/image" icon="image">
+  Retrieve property image
+</Card>
+
+```typescript
+// Construct image URL in frontend
+const imageUrl = `${environment.baseUrlApi}/houses/${code}/image`;
+```
+
+```html
+<!-- Display in template -->
+<img [src]="house.image" [alt]="house.name" />
+```
+
+## Housing Management (Admin Only)
+
+### Creating New Properties
+
+Only authenticated users with `ROLE_USER` or `ROLE_ADMIN` can create new housing listings:
+
+<Card title="POST /v1/api/houses" icon="plus">
+  Create a new housing property (requires JWT)
+</Card>
+
+```java
+@PostMapping
+@SecurityRequirement(name = "JWT")
+public ResponseEntity<HousingDTO> createHouse(@RequestBody HousingDTO house) {
+    HousingDTO createdHouse = housingService.createHouse(house);
+    return ResponseEntity.status(HttpStatus.CREATED).body(createdHouse);
+}
+```
+
+### Approval Workflow
+
+New properties require admin approval before appearing in search results:
+
+1. User submits property with `acepted: false`
+2. Admin reviews the listing
+3. Admin sets `acepted: true` to publish
+4. Property becomes visible to all users
+
+<Warning>
+  Only properties with `acepted: true` should be displayed in the public catalog. Filter results appropriately in your queries.
+</Warning>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Optimize Image Loading">
+    Use lazy loading for property images to improve page load times:
+    ```html
+    <img loading="lazy" [src]="house.image" />
+    ```
+  </Accordion>
+  
+  <Accordion title="Cache Search Results">
+    Consider caching popular search queries client-side to reduce server load and improve response times.
+  </Accordion>
+  
+  <Accordion title="Implement Skeleton Screens">
+    Show loading placeholders while fetching properties to improve perceived performance:
+    ```typescript
+    <div *ngIf="isLoading" class="skeleton-card"></div>
+    ```
+  </Accordion>
+  
+  <Accordion title="Error Handling">
+    Always handle API errors gracefully and show user-friendly messages:
+    ```typescript
+    error: (err) => {
+      this.errorMessage = 'Unable to load properties. Please try again.';
+      console.error('Error loading houses:', err);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## UI Flow Example
+
+<Steps>
+  <Step title="User lands on /room">
+    Initial page load with first 6 properties
+  </Step>
+  <Step title="Scroll for more">
+    User scrolls down, triggering automatic load of next page
+  </Step>
+  <Step title="Apply filters">
+    User selects tags (e.g., "Pool, WiFi") and minimum stars (e.g., 4)
+  </Step>
+  <Step title="View filtered results">
+    Search results display only matching properties
+  </Step>
+  <Step title="Click property">
+    Navigate to detail page to see full information
+  </Step>
+  <Step title="Make reservation">
+    From detail page, user can book the property (requires login)
+  </Step>
+</Steps>
+
+## Property Tags Management
+
+### Retrieving Tags for a Property
+
+<Card title="GET /v1/api/houses/{id}/tags" icon="tags">
+  Get all tags associated with a property
+</Card>
+
+```java
+@GetMapping("/{id}/tags")
+@SecurityRequirement(name = "JWT")
+public ResponseEntity<Set<TagDTO>> getTagsById(@PathVariable int id) {
+    Set<TagDTO> tags = housingService.getTagsById(id);
+    return ResponseEntity.ok(tags);
+}
+```
+
+```bash
+curl http://localhost:8080/v1/api/houses/5/tags \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+
+# Response
+[
+  { "id": 1, "name": "Pool" },
+  { "id": 2, "name": "WiFi" },
+  { "id": 3, "name": "Parking" }
+]
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="No Properties Displayed">
+    - Check if properties have `acepted: true`
+    - Verify API endpoint is responding
+    - Check browser console for JavaScript errors
+    - Ensure pagination parameters are correct
+  </Accordion>
+  
+  <Accordion title="Search Returns No Results">
+    - Verify tag names are spelled correctly (case-sensitive)
+    - Check if star rating is within 1-5 range
+    - Ensure at least one property matches criteria
+    - Try broadening search parameters
+  </Accordion>
+  
+  <Accordion title="Images Not Loading">
+    - Verify image endpoint URL is correct
+    - Check if Base64 data is properly stored
+    - Ensure CORS headers allow image requests
+    - Verify JWT token is included for authenticated endpoints
+  </Accordion>
+  
+  <Accordion title="Infinite Scroll Not Working">
+    - Check if `hasMore` flag is properly set
+    - Verify `isLoading` state is managed correctly
+    - Ensure scroll event listener is attached
+    - Check network tab for failed requests
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Making Reservations" icon="calendar-check" href="/guides/making-reservations">
+    Book a property after browsing
+  </Card>
+  
+  <Card title="Writing Reviews" icon="star" href="/guides/writing-reviews">
+    Share your experience about properties
+  </Card>
+  
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Log in to access property details
+  </Card>
+  
+  <Card title="User Roles" icon="users" href="/guides/user-roles">
+    Learn about admin approval process
+  </Card>
+</CardGroup>

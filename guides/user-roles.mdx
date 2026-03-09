@@ -1,0 +1,649 @@
+---
+title: 'User Roles'
+description: 'Understanding the different user types and their permissions in the Trippins platform'
+---
+
+## Overview
+
+Trippins implements a role-based access control (RBAC) system with three distinct user types: Anonymous users, Registered users (Clients), and Administrators. Each role has different permissions and access levels within the platform.
+
+## User Role Hierarchy
+
+<CardGroup cols={3}>
+  <Card title="Anonymous" icon="user-large" color="#6b7280">
+    Public visitors (no account)
+  </Card>
+  <Card title="Registered User" icon="user-check" color="#3b82f6">
+    Authenticated clients (ROLE_USER)
+  </Card>
+  <Card title="Administrator" icon="user-shield" color="#8b5cf6">
+    Platform admins (ROLE_ADMIN)
+  </Card>
+</CardGroup>
+
+## User Entity Structure
+
+### Base User Entity
+
+All users inherit from a common base entity:
+
+```java
+@Entity
+@Table(name = "User")
+public class User {
+    @Id
+    @Column(name = "dni", nullable = false, unique = true, length = 9)
+    private String dni;
+
+    @Column(name = "name", nullable = false, unique = true, length = 100)
+    private String name;
+
+    @Column(name = "number", nullable = false, unique = true, length = 9)
+    private Integer number;
+
+    @Column(name = "password", nullable = false, length = 20)
+    private String password;
+
+    @Column(name = "email", nullable = false, unique = true, length = 40)
+    private String email;
+
+    @Column(name = "is_admin", nullable = false)
+    protected Boolean admin;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    private List<String> roles;
+
+    @Column(name = "encoded_password", nullable = true)
+    private String encodedPassword;
+}
+```
+
+### Client Entity
+
+Regular users are represented by the Client entity:
+
+```java
+@Entity
+public class Client extends User {
+
+    public Client() {}
+    
+    public Client(String dni, String name, Integer number, String password, String email) {
+        super(dni, name, number, password, email);
+        this.admin = false;  // Not an admin
+    }
+}
+```
+
+### Admin Entity
+
+Administrators have elevated privileges:
+
+```java
+@Entity
+public class Admin extends User {
+
+    public Admin() {}
+
+    public Admin(String dni, String name, Integer number, String password, String email) {
+        super(dni, name, number, password, email);
+        this.admin = true;  // Is an admin
+    }
+}
+```
+
+## Anonymous Users
+
+### Capabilities
+
+Anonymous users (not logged in) can:
+
+<CardGroup cols={2}>
+  <Card title="Browse Properties" icon="hotel">
+    View the housing catalog at `/room`
+  </Card>
+  <Card title="Search & Filter" icon="magnifying-glass">
+    Use search functionality with tags and stars
+  </Card>
+  <Card title="View Public Pages" icon="file">
+    Access home, about, contact pages
+  </Card>
+  <Card title="Register Account" icon="user-plus">
+    Create a new user account
+  </Card>
+</CardGroup>
+
+### Restrictions
+
+Anonymous users **cannot**:
+
+- View property details
+- Make reservations
+- Write reviews
+- Access user profile
+- Create new properties
+
+### Security Configuration
+
+```java
+.authorizeHttpRequests(auth -> auth
+    // Public endpoints for anonymous users
+    .requestMatchers("/", "/index", "/about", "/contact", "/register").permitAll()
+    .requestMatchers("/room", "/v1/api/query").permitAll()
+    .requestMatchers(HttpMethod.POST, "/addUser", "/v1/api/users").permitAll()
+    .requestMatchers(HttpMethod.POST, "/v1/api/login").permitAll()
+    // ... authenticated routes require login
+)
+```
+
+<Note>
+  When an anonymous user tries to access a protected resource, they are redirected to the login page with a `returnUrl` parameter to redirect back after authentication.
+</Note>
+
+## Registered Users (Clients)
+
+### Role Assignment
+
+When users register, they automatically receive the `ROLE_USER` role:
+
+```typescript
+// During registration
+this.userService.createAccount({
+  name: formData.name,
+  email: formData.email,
+  dni: formData.dni,
+  number: formData.number,
+  password: formData.password
+}).subscribe({
+  next: () => {
+    // User created with ROLE_USER
+    this.router.navigate(['new/login']);
+  }
+});
+```
+
+### User Capabilities
+
+Registered users have all anonymous capabilities **plus**:
+
+<Steps>
+  <Step title="View Property Details">
+    Access full property information at `/room/{code}`
+  </Step>
+  <Step title="Make Reservations">
+    Book accommodations for specific dates
+  </Step>
+  <Step title="Write Reviews">
+    Submit ratings and comments for properties
+  </Step>
+  <Step title="Manage Profile">
+    View and update personal information
+  </Step>
+  <Step title="Create Properties">
+    Submit new hotel listings (requires admin approval)
+  </Step>
+</Steps>
+
+### User DTO Structure
+
+```java
+public class UserDTO {
+    private String dni;
+    private String name;
+    private Integer number;
+    private String email;
+    private Boolean admin;       // false for regular users
+    private List<String> roles;  // ["ROLE_USER"]
+}
+```
+
+### User Permissions in Security Config
+
+```java
+.authorizeHttpRequests(auth -> auth
+    // Authenticated users (ROLE_USER and ROLE_ADMIN)
+    .requestMatchers("/room/{code}", "/roomDetails").authenticated()
+    .requestMatchers("/newHotel", "/booking", "/profile").authenticated()
+    .requestMatchers(HttpMethod.POST, "/addHotel").hasAnyRole("USER", "ADMIN")
+    // ...
+)
+```
+
+### Checking User Authentication
+
+```typescript
+// Check if user is logged in
+isLoggedIn(): boolean {
+  return !!this.getJwt();
+}
+
+// Get user roles
+getRoles(): string[] {
+  const rolesJson = localStorage.getItem(this.ROLES_KEY);
+  return rolesJson ? JSON.parse(rolesJson) : [];
+}
+
+// Check specific role
+hasRole(role: string): boolean {
+  return this.getRoles().includes(role);
+}
+```
+
+## Administrators
+
+### Admin Capabilities
+
+Administrators have **all user capabilities** plus exclusive admin functions:
+
+<CardGroup cols={2}>
+  <Card title="User Management" icon="users-gear">
+    View, create, update, and delete all users
+  </Card>
+  <Card title="Review Moderation" icon="shield-halved">
+    Manage all reviews across the platform
+  </Card>
+  <Card title="Property Approval" icon="check-double">
+    Approve or reject housing submissions
+  </Card>
+  <Card title="Reservation Management" icon="calendar-days">
+    View and manage all reservations
+  </Card>
+</CardGroup>
+
+### Admin-Only Endpoints
+
+```java
+.authorizeHttpRequests(auth -> auth
+    // Admin-only access
+    .requestMatchers("/v1/api/users/**").hasRole("ADMIN")
+    .requestMatchers("/v1/api/reviews/**").hasRole("ADMIN")
+    .requestMatchers("/v1/api/admin/**").hasRole("ADMIN")
+    .requestMatchers("/admin/**", "/admin").hasRole("ADMIN")
+    // ...
+)
+```
+
+### Admin Panel Routes
+
+```typescript
+// Angular routing with admin guard
+{
+  path: 'admin',
+  component: AdminComponent,
+  canActivate: [AdminGuard],  // Checks for ROLE_ADMIN
+  children: [
+    { path: 'housing', component: HousingPanelComponent },
+    { path: 'reservations', component: ReservationPanelComponent },
+    { path: 'users', component: UserPanelComponent },
+    { path: 'reviews', component: ReviewPanelComponent }
+  ]
+}
+```
+
+### Admin Role Verification
+
+```typescript
+// Check if current user is admin
+isAdmin(): boolean {
+  return this.authService.hasRole('ROLE_ADMIN');
+}
+
+// Check for any required role
+hasAnyRole(roles: string[]): boolean {
+  var currentRoles: string[] = this.getRoles();
+  for (let index = 0; index < roles.length; index++) {
+    if (currentRoles.includes(roles[index])) {
+      return true;
+    }
+  }
+  return false;
+}
+```
+
+## Role-Based API Access
+
+### User Management APIs
+
+<Card title="GET /v1/api/users" icon="users">
+  Get all users (admin only)
+</Card>
+
+```java
+@GetMapping
+@SecurityRequirement(name = "JWT")
+public ResponseEntity<List<UserDTO>> getAllUsers() {
+    // Only accessible to ROLE_ADMIN
+    List<UserDTO> users = userService.getAllUsers();
+    return ResponseEntity.ok(users);
+}
+```
+
+<Card title="POST /v1/api/users" icon="user-plus">
+  Create new user (public for registration)
+</Card>
+
+```java
+@PostMapping
+@SecurityRequirement(name = "JWT")
+public ResponseEntity<UserDTO> createUser(@RequestBody RegisteredUserDTO user) {
+    UserDTO createdUser = userService.createUser(user);
+    return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
+}
+```
+
+<Card title="PUT /v1/api/users/{id}" icon="pen-to-square">
+  Update user (admin only)
+</Card>
+
+<Card title="DELETE /v1/api/users/{id}" icon="trash">
+  Delete user (admin only)
+</Card>
+
+### Review Management APIs
+
+<AccordionGroup>
+  <Accordion title="POST /v1/api/reviews - Create Review">
+    **Access**: Any authenticated user (ROLE_USER or ROLE_ADMIN)
+    
+    Users can create reviews for properties they've visited.
+  </Accordion>
+  
+  <Accordion title="GET /v1/api/reviews - Get All Reviews">
+    **Access**: Admin only (ROLE_ADMIN)
+    
+    Retrieve complete list of all reviews across all properties.
+  </Accordion>
+  
+  <Accordion title="PUT /v1/api/reviews/{id} - Update Review">
+    **Access**: Admin only (ROLE_ADMIN)
+    
+    Modify any review (useful for moderation).
+  </Accordion>
+  
+  <Accordion title="DELETE /v1/api/reviews/{id} - Delete Review">
+    **Access**: Admin only (ROLE_ADMIN)
+    
+    Remove inappropriate or spam reviews.
+  </Accordion>
+</AccordionGroup>
+
+## Permission Matrix
+
+| Action | Anonymous | Registered User | Administrator |
+|--------|-----------|-----------------|---------------|
+| View housing list | ✅ | ✅ | ✅ |
+| Search properties | ✅ | ✅ | ✅ |
+| View property details | ❌ | ✅ | ✅ |
+| Make reservation | ❌ | ✅ | ✅ |
+| Write review | ❌ | ✅ | ✅ |
+| Create property | ❌ | ✅ (pending approval) | ✅ |
+| Approve property | ❌ | ❌ | ✅ |
+| View all users | ❌ | ❌ | ✅ |
+| Manage users | ❌ | ❌ | ✅ |
+| Moderate reviews | ❌ | ❌ | ✅ |
+| View all reservations | ❌ | Own only | ✅ All |
+
+## Role Checking in Components
+
+### Frontend Role Guards
+
+```typescript
+// Admin guard
+@Injectable()
+export class AdminGuard implements CanActivate {
+  constructor(private authService: AuthService, private router: Router) {}
+
+  canActivate(): boolean {
+    if (this.authService.hasRole('ROLE_ADMIN')) {
+      return true;
+    }
+    this.router.navigate(['/']);
+    return false;
+  }
+}
+
+// Auth guard (any logged-in user)
+@Injectable()
+export class AuthGuard implements CanActivate {
+  constructor(private authService: AuthService, private router: Router) {}
+
+  canActivate(route: ActivatedRouteSnapshot): boolean {
+    if (this.authService.isLoggedIn()) {
+      return true;
+    }
+    
+    // Redirect to login with return URL
+    this.router.navigate(['/new/login'], {
+      queryParams: { returnUrl: route.url }
+    });
+    return false;
+  }
+}
+```
+
+### Conditional UI Elements
+
+```typescript
+<div *ngIf="authService.isLoggedIn()">
+  <!-- Shown to logged-in users -->
+  <button (click)="makeReservation()">Book Now</button>
+</div>
+
+<div *ngIf="authService.hasRole('ROLE_ADMIN')">
+  <!-- Shown only to admins -->
+  <button (click)="approveProperty()">Approve</button>
+  <button (click)="deleteUser()">Delete User</button>
+</div>
+
+<div *ngIf="!authService.isLoggedIn()">
+  <!-- Shown to anonymous users -->
+  <a routerLink="/new/login">Log in to book</a>
+</div>
+```
+
+## JWT Token and Roles
+
+### Token Structure
+
+When users log in, they receive a JWT token containing their roles:
+
+```json
+{
+  "jwt": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "roles": ["ROLE_USER"]  // or ["ROLE_ADMIN"]
+}
+```
+
+### Role Storage
+
+```typescript
+// Store roles in localStorage
+private storeRoles(roles: string[]): void {
+  localStorage.setItem(this.ROLES_KEY, JSON.stringify(roles));
+}
+
+// Retrieve roles
+getRoles(): string[] {
+  const rolesJson = localStorage.getItem(this.ROLES_KEY);
+  return rolesJson ? JSON.parse(rolesJson) : [];
+}
+```
+
+### Backend Role Extraction
+
+```java
+@PostMapping("/v1/api/login")
+public ResponseEntity<?> createAuthenticationToken(
+    @RequestBody AuthenticationRequest authenticationRequest) {
+    
+    // Authenticate user
+    authenticationManager.authenticate(
+        new UsernamePasswordAuthenticationToken(
+            authenticationRequest.getEmail(),
+            authenticationRequest.getPassword()
+        )
+    );
+
+    // Load user details
+    final UserDetails userDetails = userDetailsService
+        .loadUserByUsername(authenticationRequest.getEmail());
+    
+    // Generate JWT
+    final String jwt = jwtUtil.generateToken(userDetails);
+
+    // Extract roles from authorities
+    List<String> roles = userDetails.getAuthorities().stream()
+        .map(GrantedAuthority::getAuthority)
+        .collect(Collectors.toList());
+
+    return ResponseEntity.ok(new AuthenticationResponse(jwt, roles));
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Principle of Least Privilege">
+    Grant users only the minimum permissions needed to perform their tasks. Don't give admin rights unnecessarily.
+  </Accordion>
+  
+  <Accordion title="Role-Based UI">
+    Hide or disable UI elements that users don't have permission to use:
+    ```typescript
+    <button *ngIf="canEditUser()" (click)="edit()">Edit</button>
+    ```
+  </Accordion>
+  
+  <Accordion title="Server-Side Validation">
+    Always validate permissions on the backend, never trust client-side role checks:
+    ```java
+    @PreAuthorize("hasRole('ADMIN')")
+    public void deleteUser(String id) { ... }
+    ```
+  </Accordion>
+  
+  <Accordion title="Audit Logging">
+    Log all admin actions for security and compliance:
+    ```java
+    logger.info("Admin {} deleted user {}", adminId, userId);
+    ```
+  </Accordion>
+  
+  <Accordion title="Role Hierarchy">
+    Consider implementing role hierarchy where ADMIN inherits USER permissions automatically.
+  </Accordion>
+</AccordionGroup>
+
+## Promoting Users to Admin
+
+### Manual Database Update
+
+Currently, users are promoted to admin via direct database modification:
+
+```sql
+-- Update user to admin
+UPDATE User SET is_admin = true WHERE dni = '12345678A';
+
+-- Add ROLE_ADMIN to user's roles
+-- (Implementation depends on your ElementCollection storage)
+```
+
+### Programmatic Promotion (Future Enhancement)
+
+Consider implementing an API endpoint for admin promotion:
+
+```java
+@PutMapping("/users/{id}/promote")
+@PreAuthorize("hasRole('ADMIN')")
+public ResponseEntity<UserDTO> promoteToAdmin(@PathVariable String id) {
+    UserDTO user = userService.getUserById(id);
+    user.setAdmin(true);
+    user.getRoles().add("ROLE_ADMIN");
+    UserDTO updated = userService.updateUser(id, user);
+    return ResponseEntity.ok(updated);
+}
+```
+
+<Warning>
+  Admin promotion should be strictly controlled and logged. Consider implementing approval workflows or requiring multiple admin approvals for sensitive operations.
+</Warning>
+
+## Security Considerations
+
+<AccordionGroup>
+  <Accordion title="Session Management">
+    Trippins uses stateless JWT authentication:
+    ```java
+    .sessionManagement(session -> session
+        .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+    )
+    ```
+  </Accordion>
+  
+  <Accordion title="CSRF Protection">
+    CSRF is disabled for stateless API:
+    ```java
+    .csrf(csrf -> csrf.disable())
+    ```
+    **Note**: Re-enable CSRF if you add session-based authentication.
+  </Accordion>
+  
+  <Accordion title="Password Encryption">
+    All passwords are encrypted with BCrypt:
+    ```java
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="HTTPS Required">
+    Always use HTTPS in production to protect JWT tokens during transmission.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="403 Forbidden on Admin Endpoint">
+    - Verify user has `ROLE_ADMIN` in their roles array
+    - Check JWT token contains correct roles
+    - Ensure token is being sent in Authorization header
+    - Verify Spring Security configuration allows admin access
+  </Accordion>
+  
+  <Accordion title="User Can't Access Protected Resource">
+    - Confirm user is logged in (`isLoggedIn()` returns true)
+    - Check JWT token is stored in localStorage
+    - Verify token hasn't expired
+    - Ensure route guard is properly configured
+  </Accordion>
+  
+  <Accordion title="Roles Not Persisting After Login">
+    - Check if `storeRoles()` is being called after login
+    - Verify localStorage is not being cleared
+    - Ensure roles are included in login response
+    - Check browser's localStorage in DevTools
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Learn how to log in and register
+  </Card>
+  
+  <Card title="Making Reservations" icon="calendar-check" href="/guides/making-reservations">
+    Requires registered user role
+  </Card>
+  
+  <Card title="Writing Reviews" icon="star" href="/guides/writing-reviews">
+    Available to authenticated users
+  </Card>
+  
+  <Card title="Browsing Housing" icon="hotel" href="/guides/browsing-housing">
+    Public access with enhanced features for users
+  </Card>
+</CardGroup>

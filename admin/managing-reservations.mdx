@@ -1,0 +1,628 @@
+---
+title: Managing Reservations
+description: Learn how administrators monitor, manage, and modify user reservations across the platform
+---
+
+## Overview
+
+As a Trippins administrator, you have oversight of all reservations in the system. This includes viewing complete reservation details, modifying bookings, managing the valorated (review) status, and canceling reservations when necessary.
+
+<Note>
+Admin-level access is required to view and manage all reservations. Regular users can only see their own bookings.
+</Note>
+
+## Reservation Entity Structure
+
+The Reservation entity manages the booking lifecycle from creation through checkout and review.
+
+<CodeGroup>
+```java Reservation.java
+@Entity
+public class Reservation {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
+
+    @Column(name = "check_in", nullable = false, length = 9)
+    private Date check_in;
+
+    @Column(name = "check_out", nullable = false, length = 9)
+    private Date check_out;
+
+    @Column(name="valorated", length = 1)
+    private boolean valorated;
+
+    @ManyToOne
+    @JoinColumn(name = "Client_ID", referencedColumnName = "dni", nullable = false)
+    private User client;
+
+    @ManyToOne
+    @JoinColumn(name = "Hotel_Code", referencedColumnName = "code", nullable = false)
+    private Housing housing;
+
+    @ManyToOne
+    @JoinColumn(name = "Hotel_Name", referencedColumnName = "name", nullable = false)
+    private Housing housing_name;
+}
+```
+
+```java ReservationDTO.java
+public class ReservationDTO {
+    private Integer id;
+    private Date checkIn;
+    private Date checkOut;
+    private boolean valorated;
+    private String clientDni;      // Client identifier
+    private int housingCode;       // Housing code
+    private String housingName;    // Housing name
+}
+```
+</CodeGroup>
+
+### Key Fields
+
+<ParamField path="id" type="Integer">
+  Auto-generated unique identifier for the reservation
+</ParamField>
+
+<ParamField path="check_in" type="Date">
+  The reservation start date (guest arrival)
+</ParamField>
+
+<ParamField path="check_out" type="Date">
+  The reservation end date (guest departure)
+</ParamField>
+
+<ParamField path="valorated" type="boolean">
+  Indicates whether the guest has left a review for this stay. Set to `false` by default.
+</ParamField>
+
+<ParamField path="client" type="User">
+  Many-to-one relationship with the User entity representing the guest
+</ParamField>
+
+<ParamField path="housing" type="Housing">
+  Many-to-one relationship with the Housing entity representing the booked property
+</ParamField>
+
+## Admin Workflows
+
+### Viewing All Reservations
+
+Administrators can retrieve a complete list of all reservations across the platform.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.trippins.com/v1/api/reservations" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.trippins.com/v1/api/reservations', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer ADMIN_JWT_TOKEN'
+  }
+});
+
+const allReservations = await response.json();
+```
+
+```java Service Implementation
+public List<ReservationDTO> getAllReservations() {
+    List<Reservation> reservationList = reservationRepository.findAll();
+    List<ReservationDTO> reservationDTOList = new ArrayList<>();
+    for (Reservation reservation : reservationList) {
+        reservationDTOList.add(new ReservationDTO(reservation));
+    }
+    return reservationDTOList;
+}
+```
+</CodeGroup>
+
+**Response Example:**
+```json
+[
+  {
+    "id": 1,
+    "checkIn": "2026-03-19",
+    "checkOut": "2026-03-24",
+    "valorated": false,
+    "clientDni": "12345678A",
+    "housingCode": 1,
+    "housingName": "Hotel Madrid"
+  },
+  {
+    "id": 2,
+    "checkIn": "2026-03-19",
+    "checkOut": "2026-03-24",
+    "valorated": true,
+    "clientDni": "12345678A",
+    "housingCode": 1,
+    "housingName": "Hotel Madrid"
+  }
+]
+```
+
+### Viewing a Specific Reservation
+
+Retrieve detailed information about a single reservation by its ID.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.trippins.com/v1/api/reservations/1" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```java Service
+public ReservationDTO getReservationById(Integer id) {
+    Optional<Reservation> reservation = reservationRepository.findById(id);
+    ReservationDTO reservationDTO = new ReservationDTO(reservation.get());
+    return reservationDTO;
+}
+```
+</CodeGroup>
+
+<Info>
+Returns `200 OK` with the reservation details, or `404 Not Found` if the reservation doesn't exist
+</Info>
+
+### Filtering Unreviewed Reservations
+
+Track which guests haven't yet left reviews for their stays using the `valorated` filter.
+
+<CodeGroup>
+```java Service Method
+public Page<ReservationDTO> findByValoratedFalse(Pageable pageable) {
+    Page<Reservation> reservations = reservationRepository.findByValoratedFalse(pageable);
+
+    return reservations.map(reserves -> {
+        ReservationDTO dto = new ReservationDTO();
+        dto.setCheckIn(reserves.getCheck_in());
+        dto.setCheckOut(reserves.getCheck_out());
+        dto.setClientDni(reserves.getID_cliente().getDni());
+        dto.setHousingCode(reserves.getHousing().getCode());
+        dto.setHousingName(reserves.getHousing().getName());
+        dto.setValorated(false);
+        dto.setId(reserves.getId());
+        return dto;
+    });
+}
+```
+
+```bash Example Usage
+GET /v1/api/admin/reservations/pending-review?page=0&size=10
+```
+</CodeGroup>
+
+<Tip>
+Use this endpoint to send review reminder emails to guests who completed their stay but haven't left feedback
+</Tip>
+
+### Creating a Reservation (Admin Override)
+
+Administrators can create reservations on behalf of users, useful for phone bookings or special arrangements.
+
+<Steps>
+  <Step title="Gather Required Information">
+    Collect the client DNI, housing code, check-in date, and check-out date.
+  </Step>
+  
+  <Step title="Submit the Reservation">
+    ```bash
+    curl -X POST "https://api.trippins.com/v1/api/reservations" \
+      -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "checkIn": "2026-04-15",
+        "checkOut": "2026-04-20",
+        "valorated": false,
+        "clientDni": "87654321B",
+        "housingCode": 5,
+        "housingName": "Hotel London"
+      }'
+    ```
+  </Step>
+  
+  <Step title="Confirm Creation">
+    The API returns the created reservation with its auto-generated ID:
+    ```json
+    {
+      "id": 3,
+      "checkIn": "2026-04-15",
+      "checkOut": "2026-04-20",
+      "valorated": false,
+      "clientDni": "87654321B",
+      "housingCode": 5,
+      "housingName": "Hotel London"
+    }
+    ```
+  </Step>
+</Steps>
+
+<CodeGroup>
+```java Service Implementation
+public ReservationDTO createReservation(ReservationDTO reservation) {
+    Reservation newReservation = new Reservation(
+        reservation.getId(), 
+        userRepository.findById(reservation.getClientDni()).get(),
+        housingRepository.findByCode(reservation.getHousingCode()).get(),
+        reservation.getCheckIn(),
+        reservation.getCheckOut(),
+        reservation.isValorated()
+    );
+    reservationRepository.save(newReservation);
+    return new ReservationDTO(newReservation);
+}
+```
+</CodeGroup>
+
+### Modifying an Existing Reservation
+
+Update reservation details such as dates, housing, or review status.
+
+<CodeGroup>
+```bash cURL
+curl -X PUT "https://api.trippins.com/v1/api/reservations/1" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": 1,
+    "checkIn": "2026-03-20",
+    "checkOut": "2026-03-25",
+    "valorated": false,
+    "clientDni": "12345678A",
+    "housingCode": 2,
+    "housingName": "Hotel Barcelona"
+  }'
+```
+
+```java Service
+public ReservationDTO updateReservation(Integer id, ReservationDTO reservation) {
+    Optional<Reservation> originalReservation = reservationRepository.findById(id);
+    Reservation finalOriginalReservation = originalReservation.get();
+
+    finalOriginalReservation.setCheck_in(reservation.getCheckIn());
+    finalOriginalReservation.setCheck_out(reservation.getCheckOut());
+    finalOriginalReservation.setHousing(
+        housingRepository.findByCode(reservation.getHousingCode()).get()
+    );
+    finalOriginalReservation.setID_cliente(
+        userRepository.findById(reservation.getClientDni()).get()
+    );
+    finalOriginalReservation.setId(id);
+    finalOriginalReservation.setValorated(reservation.isValorated());
+
+    reservationRepository.save(finalOriginalReservation);
+    return new ReservationDTO(finalOriginalReservation);
+}
+```
+</CodeGroup>
+
+<Warning>
+When modifying check-in/check-out dates, ensure there are no conflicting reservations for the same housing
+</Warning>
+
+### Marking a Reservation as Reviewed
+
+When a guest completes a review, update the `valorated` flag to track completion.
+
+<CodeGroup>
+```java Service Method
+public void acceptReservation(Integer id) {
+    Reservation reservation = reservationRepository.findById(id).get();
+    reservation.setValorated(true);
+    reservationRepository.save(reservation);
+}
+```
+
+```bash API Call
+curl -X PUT "https://api.trippins.com/v1/api/reservations/1" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": 1,
+    "checkIn": "2026-03-19",
+    "checkOut": "2026-03-24",
+    "valorated": true,
+    "clientDni": "12345678A",
+    "housingCode": 1,
+    "housingName": "Hotel Madrid"
+  }'
+```
+</CodeGroup>
+
+<Check>
+This flag helps track engagement metrics and can trigger automated follow-up workflows
+</Check>
+
+### Canceling a Reservation
+
+Remove a reservation from the system when canceled by the guest or admin.
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://api.trippins.com/v1/api/reservations/1" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```java Service
+public void deleteReservation(Integer id) {
+    reservationRepository.deleteById(id);
+}
+```
+</CodeGroup>
+
+<Info>
+Returns `204 No Content` on successful deletion. This operation is permanent.
+</Info>
+
+## User-Specific Reservations
+
+### Viewing Reservations by Client
+
+Retrieve all reservations for a specific user by their DNI.
+
+<CodeGroup>
+```java Service Implementation
+public List<ReservationDTO> getReservationsByOwner(User user) {
+    List<Reservation> reservations = 
+        reservationRepository.findByClientDni(user.getDni());
+
+    List<ReservationDTO> reservationDTOs = new ArrayList<>();
+    for (Reservation reservation : reservations) {
+        reservationDTOs.add(new ReservationDTO(reservation));
+    }
+    return reservationDTOs;
+}
+```
+
+```bash Example Query
+GET /v1/api/users/12345678A/reservations
+```
+</CodeGroup>
+
+**Use Cases:**
+- Customer support inquiries
+- Analyzing booking patterns
+- Resolving disputes or issues
+- Generating user activity reports
+
+## Reservation Lifecycle
+
+<Steps>
+  <Step title="Reservation Creation">
+    Guest selects housing, check-in/check-out dates, and confirms booking. `valorated` is set to `false`.
+  </Step>
+  
+  <Step title="Active Reservation">
+    Guest checks in on the `check_in` date. Reservation is active until `check_out` date.
+  </Step>
+  
+  <Step title="Post-Stay Period">
+    After check-out, the reservation remains in the system with `valorated = false`.
+  </Step>
+  
+  <Step title="Review Submission">
+    Guest leaves a review. Admin or system updates `valorated = true`.
+  </Step>
+  
+  <Step title="Completed">
+    Reservation is marked as fully completed with review on file.
+  </Step>
+</Steps>
+
+## Data Initialization
+
+The system includes a reservation initializer for development and testing:
+
+```java ReservationService.java
+public void initializeReservations() {
+    Optional<User> defUser = userRepository.findByName("Pepe");
+    Optional<Housing> defHousing = housingRepository.findById(1);
+
+    Calendar calendar = Calendar.getInstance();
+    calendar.add(Calendar.DAY_OF_MONTH, 10); // Check-in in 10 days
+    Date checkIn1 = new Date(calendar.getTimeInMillis());
+
+    calendar.add(Calendar.DAY_OF_MONTH, 5); // Check-out 5 days after check-in
+    Date checkOut1 = new Date(calendar.getTimeInMillis());
+
+    List<Reservation> prechargedReservations = Arrays.asList(
+        new Reservation(1, (Client) defUser.get(), defHousing.get(), checkIn1, checkOut1),
+        new Reservation(2, (Client) defUser.get(), defHousing.get(), checkIn1, checkOut1)
+    );
+
+    reservationRepository.saveAll(prechargedReservations);
+}
+```
+
+<Note>
+This method is called during application startup via `@PostConstruct` or similar initialization hooks
+</Note>
+
+## Security and Permissions
+
+### Admin-Only Access
+
+Reservation management endpoints require the `ADMIN` role:
+
+```java SecurityConfiguration.java
+@Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth
+        .requestMatchers("/v1/api/reservations/**").hasRole("ADMIN")
+        .requestMatchers("/admin/**").hasRole("ADMIN")
+        // ...
+    );
+    return http.build();
+}
+```
+
+### JWT Authentication
+
+All operations require a valid JWT token with admin privileges:
+
+<CodeGroup>
+```bash Authorization Header
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+```java Token Validation
+@SecurityRequirement(name = "JWT")
+@GetMapping
+public ResponseEntity<List<ReservationDTO>> getAllReservations() {
+    List<ReservationDTO> reservationDTOs = reservationService.getAllReservations();
+    return ResponseEntity.ok(reservationDTOs);
+}
+```
+</CodeGroup>
+
+<Warning>
+Non-admin users attempting to access reservation management endpoints receive `403 Forbidden`
+</Warning>
+
+## API Reference
+
+### Reservation Management Endpoints
+
+<ResponseField name="GET /v1/api/reservations" type="GET">
+  Retrieve all reservations in the system
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Response**: `200 OK` with array of ReservationDTO objects
+</ResponseField>
+
+<ResponseField name="GET /v1/api/reservations/{id}" type="GET">
+  Get a specific reservation by ID
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Parameters**: 
+  - `id` (path) - Reservation ID (e.g., 1)
+  
+  **Response**: `200 OK` with ReservationDTO object
+</ResponseField>
+
+<ResponseField name="POST /v1/api/reservations" type="POST">
+  Create a new reservation
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Body**: ReservationDTO object (ID is auto-generated)
+  
+  **Response**: `201 Created` with created ReservationDTO
+</ResponseField>
+
+<ResponseField name="PUT /v1/api/reservations/{id}" type="PUT">
+  Update an existing reservation
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Parameters**: 
+  - `id` (path) - Reservation ID to update
+  
+  **Body**: Complete ReservationDTO object
+  
+  **Response**: `200 OK` with updated ReservationDTO
+</ResponseField>
+
+<ResponseField name="DELETE /v1/api/reservations/{id}" type="DELETE">
+  Cancel and delete a reservation
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Parameters**: 
+  - `id` (path) - Reservation ID to delete
+  
+  **Response**: `204 No Content`
+</ResponseField>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Validate Date Ranges">
+    Always ensure `check_out` is after `check_in`. Implement validation logic to prevent invalid date ranges.
+  </Accordion>
+  
+  <Accordion title="Check Housing Availability">
+    Before creating or modifying reservations, verify the housing is available for the requested dates.
+  </Accordion>
+  
+  <Accordion title="Track Valorated Status">
+    Monitor the `valorated` flag to identify guests who haven't left reviews. Use this for engagement campaigns.
+  </Accordion>
+  
+  <Accordion title="Maintain Data Integrity">
+    When deleting a reservation, consider the impact on reviews and payment records. Archive instead of delete when possible.
+  </Accordion>
+  
+  <Accordion title="Audit Trail">
+    Log all admin modifications to reservations for accountability and dispute resolution.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="404 Not Found for Reservation">
+    **Cause**: The reservation ID doesn't exist in the database
+    
+    **Solution**: Verify the ID is correct using the GET all reservations endpoint
+  </Accordion>
+  
+  <Accordion title="Invalid Client DNI or Housing Code">
+    **Cause**: Referenced client or housing doesn't exist
+    
+    **Solution**: Ensure the `clientDni` and `housingCode` correspond to existing User and Housing records
+  </Accordion>
+  
+  <Accordion title="Cannot Update Valorated Status">
+    **Cause**: Review hasn't been submitted yet
+    
+    **Solution**: Only set `valorated = true` after the corresponding review is created in the Review entity
+  </Accordion>
+  
+  <Accordion title="Date Format Errors">
+    **Cause**: Incorrect date format in API requests
+    
+    **Solution**: Use ISO 8601 date format: `YYYY-MM-DD` (e.g., "2026-03-19")
+  </Accordion>
+</AccordionGroup>
+
+## Reporting and Analytics
+
+### Key Metrics to Track
+
+<CardGroup cols={2}>
+  <Card title="Total Reservations" icon="calendar-check">
+    Monitor overall booking volume
+  </Card>
+  <Card title="Pending Reviews" icon="comment-dots">
+    Track reservations with `valorated = false`
+  </Card>
+  <Card title="Average Stay Duration" icon="clock">
+    Calculate `check_out - check_in` across bookings
+  </Card>
+  <Card title="Top Properties" icon="star">
+    Identify housing with most reservations
+  </Card>
+</CardGroup>
+
+### Sample Query for Analytics
+
+```java
+// Get all reservations for a specific date range
+List<Reservation> reservations = reservationRepository
+    .findByCheckInBetween(startDate, endDate);
+
+// Calculate average stay duration
+double avgDuration = reservations.stream()
+    .mapToLong(r -> ChronoUnit.DAYS.between(
+        r.getCheck_in().toLocalDate(), 
+        r.getCheck_out().toLocalDate()
+    ))
+    .average()
+    .orElse(0.0);
+```

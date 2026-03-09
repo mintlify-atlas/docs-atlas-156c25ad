@@ -1,0 +1,382 @@
+---
+title: 'Docker Deployment'
+description: 'Deploy Trippins using Docker and Docker Compose'
+icon: 'docker'
+---
+
+## Overview
+
+Trippins uses a multi-stage Docker build process to create an optimized production image that combines the Angular frontend and Spring Boot backend into a single deployable container.
+
+<Info>
+  The Docker setup uses a three-stage build process: Angular compilation, Maven build with frontend integration, and final runtime image.
+</Info>
+
+## Architecture
+
+The deployment consists of two main services:
+
+<CardGroup cols={2}>
+  <Card title="MySQL Database" icon="database">
+    MySQL 8.0.33 container for persistent data storage
+  </Card>
+  <Card title="Application Server" icon="server">
+    Spring Boot application with embedded Angular frontend
+  </Card>
+</CardGroup>
+
+## Dockerfile
+
+The Dockerfile uses a multi-stage build to optimize the final image size:
+
+```dockerfile
+FROM node:19.0.1 AS angular
+WORKDIR /code
+COPY ./frontend/package*.json ./frontend/angular.json ./frontend/tsconfig*.json /code/
+RUN npm install && npm install chart.js
+COPY ../frontend/src /code/src
+RUN npm run build -- --configuration production --base-href=/new/
+
+FROM maven:3.8.4-openjdk-17 AS builder
+WORKDIR /daw
+COPY ./backend/pom.xml .  
+RUN mvn dependency:go-offline
+COPY ./backend/src ./src
+RUN mkdir -p src/main/resources/static/new
+COPY --from=angular /code/dist/trippins-app/browser/ src/main/resources/static/new
+RUN mvn clean package -DskipTests
+
+FROM openjdk:17-jdk-slim
+WORKDIR /daw
+COPY --from=builder /daw/target/*.jar app.jar
+EXPOSE 443
+CMD ["java", "-jar", "app.jar"]
+```
+
+### Build Stages
+
+<Steps>
+  <Step title="Stage 1: Angular Build">
+    - Base image: `node:19.0.1`
+    - Installs npm dependencies including chart.js
+    - Builds Angular application for production
+    - Sets base href to `/new/` for routing
+  </Step>
+  
+  <Step title="Stage 2: Maven Build">
+    - Base image: `maven:3.8.4-openjdk-17`
+    - Downloads Maven dependencies offline
+    - Copies compiled Angular files to Spring Boot static resources
+    - Packages the application as a JAR file
+  </Step>
+  
+  <Step title="Stage 3: Runtime Image">
+    - Base image: `openjdk:17-jdk-slim`
+    - Copies only the compiled JAR from builder stage
+    - Exposes port 443 for HTTPS traffic
+    - Runs the Spring Boot application
+  </Step>
+</Steps>
+
+## Docker Compose Configuration
+
+The `docker-compose.yml` file orchestrates both the database and application services:
+
+```yaml
+version: '3.9'
+
+services:
+  db:
+    image: mysql:8.0.33
+    container_name: trippins-db
+    restart: always
+    environment:
+      - MYSQL_DATABASE=Trippins
+      - MYSQL_ROOT_PASSWORD=password
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - trippins-network
+
+  web:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: jantoniio3/trippins:latest
+    container_name: trippins-app
+    ports:
+      - "443:8443"  # HTTPS port mapping
+    depends_on:
+      - db
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/Trippins
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=password
+      - JWT_SECRET=password
+      - SERVER_SSL_ENABLED=true
+      - SERVER_PORT=8443
+    restart: on-failure
+    networks:
+      - trippins-network
+
+volumes:
+  db_data:
+
+networks:
+  trippins-network:
+```
+
+### Service Configuration
+
+<AccordionGroup>
+  <Accordion title="Database Service (db)">
+    **Image**: MySQL 8.0.33
+    
+    **Environment Variables**:
+    - `MYSQL_DATABASE`: Trippins
+    - `MYSQL_ROOT_PASSWORD`: password
+    
+    **Port Mapping**: `3307:3306` (host:container)
+    
+    **Volume**: `db_data` mounted to `/var/lib/mysql` for data persistence
+    
+    **Network**: Connected to `trippins-network`
+  </Accordion>
+  
+  <Accordion title="Application Service (web)">
+    **Build Context**: Parent directory with Dockerfile in `docker/` subdirectory
+    
+    **Image**: `jantoniio3/trippins:latest`
+    
+    **Port Mapping**: `443:8443` (HTTPS)
+    
+    **Dependencies**: Waits for `db` service to start
+    
+    **Environment Variables**:
+    - `SPRING_DATASOURCE_URL`: Connection to MySQL container
+    - `SPRING_DATASOURCE_USERNAME`: root
+    - `SPRING_DATASOURCE_PASSWORD`: password
+    - `JWT_SECRET`: password
+    - `SERVER_SSL_ENABLED`: true
+    - `SERVER_PORT`: 8443
+    
+    **Restart Policy**: `on-failure`
+    
+    **Network**: Connected to `trippins-network`
+  </Accordion>
+</AccordionGroup>
+
+## Deployment Commands
+
+### Build and Run Locally
+
+<CodeGroup>
+```bash Local Deployment
+# Navigate to docker directory
+cd TrippinsApp/docker
+
+# Build and start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+```
+
+```bash Build Only
+# Build the Docker image
+docker build -t trippins:latest -f docker/Dockerfile .
+
+# Run the container
+docker run -p 443:8443 trippins:latest
+```
+</CodeGroup>
+
+### Production Deployment Script
+
+The `image.sh` script automates building, tagging, and pushing the image to Docker Hub:
+
+```bash
+echo "🔨 Construyendo imagen Docker desde la raíz del proyecto..."
+
+docker build -t trippins:latest -f ../docker/Dockerfile ../
+
+echo "🏷️ Etiquetando imagen..."
+docker tag trippins:latest jantoniio3/trippins:latest
+
+echo "📤 Subiendo a Docker Hub..."
+docker push jantoniio3/trippins:latest
+
+echo "🔄 Actualizando imagen en el servidor..."
+
+echo "🔄 Actualizando imagen de docker"
+docker-compose pull
+
+echo "✅ ¡Todo listo!"
+```
+
+<Steps>
+  <Step title="Build Image">
+    Builds the Docker image from the project root using the Dockerfile
+  </Step>
+  
+  <Step title="Tag Image">
+    Tags the image with the Docker Hub repository name
+  </Step>
+  
+  <Step title="Push to Registry">
+    Pushes the tagged image to Docker Hub
+  </Step>
+  
+  <Step title="Update Server">
+    Pulls the latest image on the deployment server
+  </Step>
+</Steps>
+
+<Warning>
+  Make sure to configure your Docker Hub credentials before running the deployment script:
+  ```bash
+  docker login
+  ```
+</Warning>
+
+## Port Mappings
+
+| Service | Host Port | Container Port | Protocol | Description |
+|---------|-----------|----------------|----------|-------------|
+| Database | 3307 | 3306 | TCP | MySQL database access |
+| Application | 443 | 8443 | HTTPS | Application HTTPS endpoint |
+
+<Note>
+  The application runs on port 8443 internally but is exposed on port 443 for standard HTTPS access.
+</Note>
+
+## Networking
+
+All services communicate through a custom bridge network called `trippins-network`. This allows:
+
+- Service discovery by container name
+- Isolated network environment
+- Secure inter-service communication
+
+<Tip>
+  The backend connects to the database using the hostname `db` instead of `localhost` due to Docker's internal DNS resolution.
+</Tip>
+
+## Volume Management
+
+### Database Persistence
+
+The `db_data` volume ensures that database data persists across container restarts:
+
+```bash
+# Backup database volume
+docker run --rm -v trippins_db_data:/data -v $(pwd):/backup \
+  ubuntu tar czf /backup/db-backup.tar.gz /data
+
+# Restore database volume
+docker run --rm -v trippins_db_data:/data -v $(pwd):/backup \
+  ubuntu tar xzf /backup/db-backup.tar.gz -C /
+
+# Remove volume (destructive)
+docker volume rm trippins_db_data
+```
+
+## Environment Variables
+
+The following environment variables can be overridden in the docker-compose file:
+
+<ParamField path="SPRING_DATASOURCE_URL" type="string" required>
+  JDBC URL for MySQL database connection
+  
+  Default: `jdbc:mysql://db:3306/Trippins`
+</ParamField>
+
+<ParamField path="SPRING_DATASOURCE_USERNAME" type="string" required>
+  Database username
+  
+  Default: `root`
+</ParamField>
+
+<ParamField path="SPRING_DATASOURCE_PASSWORD" type="string" required>
+  Database password
+  
+  Default: `password`
+</ParamField>
+
+<ParamField path="JWT_SECRET" type="string" required>
+  Secret key for JWT token generation
+  
+  Default: `password`
+</ParamField>
+
+<ParamField path="SERVER_SSL_ENABLED" type="boolean" required>
+  Enable/disable SSL
+  
+  Default: `true`
+</ParamField>
+
+<ParamField path="SERVER_PORT" type="number" required>
+  Internal application port
+  
+  Default: `8443`
+</ParamField>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Container won't start">
+    Check logs for errors:
+    ```bash
+    docker-compose logs web
+    docker-compose logs db
+    ```
+    
+    Verify database is ready:
+    ```bash
+    docker exec -it trippins-db mysql -uroot -ppassword
+    ```
+  </Accordion>
+  
+  <Accordion title="Cannot connect to database">
+    Ensure the database container is running:
+    ```bash
+    docker-compose ps
+    ```
+    
+    Check network connectivity:
+    ```bash
+    docker exec -it trippins-app ping db
+    ```
+  </Accordion>
+  
+  <Accordion title="Port already in use">
+    Change the host port mapping in `docker-compose.yml`:
+    ```yaml
+    ports:
+      - "8443:8443"  # Use different host port
+    ```
+  </Accordion>
+  
+  <Accordion title="Build fails during Maven stage">
+    Clear Docker build cache:
+    ```bash
+    docker-compose build --no-cache
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="gear" href="/deployment/configuration">
+    Configure application settings and environment variables
+  </Card>
+  <Card title="Database Setup" icon="database" href="/deployment/database">
+    Learn about the database schema and initialization
+  </Card>
+</CardGroup>

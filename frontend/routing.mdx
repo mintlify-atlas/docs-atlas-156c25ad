@@ -1,0 +1,636 @@
+---
+title: Routing Configuration
+description: Angular routing, navigation, guards, and route protection in the Trippins platform
+---
+
+## Routing Overview
+
+The Trippins frontend uses **Angular Router** for client-side navigation with route guards for authentication and authorization. All routes are prefixed with `/new/` for API versioning compatibility.
+
+<CardGroup cols={2}>
+  <Card title="Public Routes" icon="globe">
+    Accessible to all users
+  </Card>
+  <Card title="Protected Routes" icon="lock">
+    Require authentication
+  </Card>
+  <Card title="Admin Routes" icon="shield">
+    Require ROLE_ADMIN
+  </Card>
+  <Card title="Guards" icon="user-shield">
+    Route protection logic
+  </Card>
+</CardGroup>
+
+## Route Configuration
+
+The main routing module defines all application routes:
+
+```typescript src/app/app-routing.module.ts
+import { NgModule } from '@angular/core';
+import { RouterModule, Routes } from '@angular/router';
+import { RoomComponent } from './components/room/room.component';
+import { AboutComponent } from './components/about/about.component';
+import { AdminComponent } from './components/admin/admin.component';
+import { ErrorComponent } from './components/error/error.component';
+import { IndexComponent } from './components/index/index.component';
+import { LoginComponent } from './components/login/login.component';
+import { NewhotelComponent } from './components/newhotel/newhotel.component';
+import { ProfileComponent } from './components/profile/profile.component';
+import { RegisterComponent } from './components/register/register.component';
+import { RoomDetailsComponent } from './components/room-details/room-details.component';
+import { authGuard } from './guards/auth.guard';
+import { roleGuard } from './guards/role.guard';
+
+const routes: Routes = [
+  { path: '', component: IndexComponent },
+  { path: 'new/home', redirectTo: '', pathMatch: 'full' },
+  { path: 'new/index', redirectTo: '', pathMatch: 'full' },
+  
+  // Public routes
+  { path: 'new/about', component: AboutComponent },
+  { path: 'new/login', component: LoginComponent },
+  { path: 'new/register', component: RegisterComponent },
+  { path: 'new/rooms', component: RoomComponent },
+  { path: 'new/rooms/:id', component: RoomDetailsComponent, canActivate: [authGuard] },
+  
+  // Protected user routes
+  { 
+    path: 'new/profile', 
+    component: ProfileComponent,
+    canActivate: [authGuard]
+  },
+  
+  // Admin routes
+  { 
+    path: 'new/admin', 
+    component: AdminComponent,
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ["ROLE_ADMIN"] }
+  },
+  { 
+    path: 'new/housing/creation', 
+    component: NewhotelComponent,
+    canActivate: [authGuard]
+  },
+  
+  // Error route
+  { path: 'new/error', component: ErrorComponent },
+  
+  // Wildcard route (must be last)
+  { path: '**', redirectTo: 'error' }
+];
+
+@NgModule({
+  imports: [RouterModule.forRoot(routes)],
+  exports: [RouterModule]
+})
+export class AppRoutingModule { }
+```
+
+## Route Types
+
+### Public Routes
+
+Accessible without authentication:
+
+| Path | Component | Description |
+|------|-----------|-------------|
+| `/` | IndexComponent | Landing page |
+| `/new/home` | *Redirect to /* | Home alias |
+| `/new/about` | AboutComponent | About page |
+| `/new/login` | LoginComponent | Login form |
+| `/new/register` | RegisterComponent | Registration form |
+| `/new/rooms` | RoomComponent | Hotel listings |
+
+<Info>
+**Multiple paths can redirect to the same component** using `redirectTo` with `pathMatch: 'full'` for exact matching.
+</Info>
+
+### Protected Routes (Authentication Required)
+
+Require user to be logged in via `authGuard`:
+
+| Path | Component | Guard | Description |
+|------|-----------|-------|-------------|
+| `/new/rooms/:id` | RoomDetailsComponent | authGuard | Individual room details |
+| `/new/profile` | ProfileComponent | authGuard | User profile |
+| `/new/housing/creation` | NewhotelComponent | authGuard | Create hotel listing |
+
+### Admin Routes (Role-Based Access)
+
+Require both authentication AND admin role:
+
+| Path | Component | Guards | Required Role | Description |
+|------|-----------|--------|---------------|-------------|
+| `/new/admin` | AdminComponent | authGuard, roleGuard | ROLE_ADMIN | Admin dashboard |
+
+<Note>
+**Route data** can pass configuration to guards. The admin route passes `data: { roles: ["ROLE_ADMIN"] }` to the roleGuard.
+</Note>
+
+## Route Parameters
+
+### Path Parameters
+
+Extract dynamic segments from the URL:
+
+<CodeGroup>
+
+```typescript Route Definition
+{
+  path: 'new/rooms/:id',
+  component: RoomDetailsComponent,
+  canActivate: [authGuard]
+}
+```
+
+```typescript Component Usage
+import { ActivatedRoute } from '@angular/router';
+
+export class RoomDetailsComponent implements OnInit {
+  constructor(private route: ActivatedRoute) {}
+
+  ngOnInit(): void {
+    // Get route parameter
+    const id = this.route.snapshot.paramMap.get('id');
+    if (id) {
+      this.loadHouseDetails(Number(id));
+    }
+  }
+}
+```
+
+</CodeGroup>
+
+### Query Parameters
+
+Handle optional URL parameters:
+
+<CodeGroup>
+
+```typescript Setting Query Params
+this.router.navigate(['new/login'], {
+  queryParams: { returnUrl: '/new/profile' }
+});
+// Results in: /new/login?returnUrl=%2Fnew%2Fprofile
+```
+
+```typescript Reading Query Params
+const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/';
+this.router.navigateByUrl(returnUrl);
+```
+
+</CodeGroup>
+
+<Tip>
+Query parameters are useful for **return URLs** after login, allowing users to continue where they left off.
+</Tip>
+
+## Route Guards
+
+### Authentication Guard
+
+Functional guard that checks if user is logged in:
+
+```typescript src/app/guards/auth.guard.ts
+import { inject } from '@angular/core';
+import { ActivatedRouteSnapshot, CanActivateFn, Router, RouterStateSnapshot } from '@angular/router';
+import { AuthService } from '../services/auth.service';
+
+export const authGuard: CanActivateFn = (
+  route: ActivatedRouteSnapshot,
+  state: RouterStateSnapshot
+) => {
+  const authService = inject(AuthService);
+  const router = inject(Router);
+
+  if (authService.isLoggedIn()) {
+    return true;
+  }
+
+  // Redirect to login page with return URL
+  return router.createUrlTree(['new/login'], {
+    queryParams: { returnUrl: state.url }
+  });
+};
+```
+
+<Accordion title="How authGuard Works">
+  1. **Inject Dependencies**: Uses Angular's `inject()` function to get services
+  2. **Check Authentication**: Calls `authService.isLoggedIn()` to verify JWT token exists
+  3. **Allow Access**: Returns `true` if authenticated
+  4. **Redirect**: Returns a `UrlTree` to redirect unauthenticated users to login
+  5. **Preserve Destination**: Adds `returnUrl` query parameter for post-login redirect
+</Accordion>
+
+### Role-Based Guard
+
+Checks if user has required roles for admin access:
+
+```typescript src/app/guards/role.guard.ts
+import { ActivatedRouteSnapshot, CanActivateFn, Router, RouterStateSnapshot } from '@angular/router';
+import { AuthService } from '../services/auth.service';
+import { inject } from '@angular/core';
+
+export const roleGuard: CanActivateFn = (
+  route: ActivatedRouteSnapshot,
+  state: RouterStateSnapshot
+) => {
+  const authService = inject(AuthService);
+  const router = inject(Router);
+
+  const requiredRoles = route.data['roles'] as string[];
+  if (authService.hasAnyRole(requiredRoles)) {
+    return true;
+  }
+  
+  return router.createUrlTree(['new/error']);
+};
+```
+
+<Accordion title="How roleGuard Works">
+  1. **Extract Required Roles**: Gets roles from route data configuration
+  2. **Check User Roles**: Calls `authService.hasAnyRole(requiredRoles)`
+  3. **Allow Access**: Returns `true` if user has at least one required role
+  4. **Deny Access**: Redirects to error page if user lacks permissions
+</Accordion>
+
+### Guard Execution Order
+
+When multiple guards are applied, they execute in array order:
+
+```typescript
+{
+  path: 'new/admin',
+  component: AdminComponent,
+  canActivate: [authGuard, roleGuard], // Executes authGuard first, then roleGuard
+  data: { roles: ["ROLE_ADMIN"] }
+}
+```
+
+<Steps>
+  <Step title="authGuard Runs First">
+    Verifies user is logged in
+  </Step>
+  <Step title="If Auth Passes, roleGuard Runs">
+    Checks if user has required role
+  </Step>
+  <Step title="Both Must Pass">
+    User must be authenticated AND have admin role
+  </Step>
+</Steps>
+
+## Navigation Methods
+
+### Programmatic Navigation
+
+<CodeGroup>
+
+```typescript Navigate by Path
+import { Router } from '@angular/router';
+
+export class HeaderComponent {
+  constructor(private router: Router) {}
+
+  logout(): void {
+    this.authService.logout();
+    this.router.navigate(['new/login']);
+  }
+}
+```
+
+```typescript Navigate by URL String
+onSuccess(): void {
+  const returnUrl = this.route.snapshot.queryParams['returnUrl'] || '/';
+  this.router.navigateByUrl(returnUrl);
+}
+```
+
+```typescript Navigate with Parameters
+this.router.navigate(['new/rooms', roomId], {
+  queryParams: { filter: 'available' }
+});
+// Results in: /new/rooms/123?filter=available
+```
+
+</CodeGroup>
+
+### Template Navigation
+
+<CodeGroup>
+
+```html Basic RouterLink
+<a routerLink="/new/about">About Us</a>
+<a [routerLink]="['/new/rooms']">View Rooms</a>
+```
+
+```html RouterLink with Parameters
+<a [routerLink]="['/new/rooms', house.code]">
+  View Details
+</a>
+```
+
+```html Active Route Styling
+<a routerLink="/new/admin" 
+   routerLinkActive="active"
+   [routerLinkActiveOptions]="{exact: true}">
+  Admin Panel
+</a>
+```
+
+</CodeGroup>
+
+<Note>
+**routerLinkActive** automatically adds CSS classes when the route is active, useful for navigation highlighting.
+</Note>
+
+## Route Events
+
+Listen to navigation events for loading indicators or analytics:
+
+```typescript
+import { Router, NavigationStart, NavigationEnd, NavigationError } from '@angular/router';
+
+export class AppComponent implements OnInit {
+  constructor(private router: Router) {}
+
+  ngOnInit() {
+    this.router.events.subscribe(event => {
+      if (event instanceof NavigationStart) {
+        // Show loading spinner
+        console.log('Navigation started:', event.url);
+      }
+      
+      if (event instanceof NavigationEnd) {
+        // Hide loading spinner
+        console.log('Navigation completed:', event.urlAfterRedirects);
+      }
+      
+      if (event instanceof NavigationError) {
+        // Handle navigation error
+        console.error('Navigation error:', event.error);
+      }
+    });
+  }
+}
+```
+
+## Wildcard Route
+
+Catch-all route for 404 errors (must be last):
+
+```typescript
+{ path: '**', redirectTo: 'error' }
+```
+
+<Warning>
+The **wildcard route must be the last route** in the configuration. Routes are evaluated in order, so `**` will match everything if placed earlier.
+</Warning>
+
+## Route Resolution
+
+### Route Resolvers
+
+Pre-fetch data before navigating to a route (not currently implemented, but recommended pattern):
+
+```typescript
+import { inject } from '@angular/core';
+import { ResolveFn } from '@angular/router';
+import { HousingServiceService } from '../services/housing-service.service';
+
+export const roomResolver: ResolveFn<HousingDTO> = (route, state) => {
+  const housingService = inject(HousingServiceService);
+  const id = Number(route.paramMap.get('id'));
+  return housingService.getSpecificRoom(id);
+};
+```
+
+```typescript
+{
+  path: 'new/rooms/:id',
+  component: RoomDetailsComponent,
+  resolve: { room: roomResolver },
+  canActivate: [authGuard]
+}
+```
+
+<Tip>
+**Resolvers** ensure data is loaded before the component renders, preventing blank screens during data fetching.
+</Tip>
+
+## Authentication Flow with Routing
+
+<Steps>
+  <Step title="User Attempts Protected Route">
+    User navigates to `/new/profile`
+  </Step>
+  <Step title="authGuard Executes">
+    Guard checks if JWT token exists in localStorage
+  </Step>
+  <Step title="Not Authenticated">
+    User redirected to `/new/login?returnUrl=/new/profile`
+  </Step>
+  <Step title="User Logs In">
+    LoginComponent submits credentials to backend
+  </Step>
+  <Step title="Token Stored">
+    AuthService stores JWT token and roles
+  </Step>
+  <Step title="Redirect to Original URL">
+    User navigated back to `/new/profile`
+  </Step>
+</Steps>
+
+```typescript Login Component Flow
+onSubmit(): void {
+  this.authService.login({ email, password }).subscribe({
+    next: () => {
+      // Extract return URL from query params
+      const returnUrl = this.router.parseUrl(this.router.url)
+        .queryParams['returnUrl'] || '/';
+      this.router.navigateByUrl(returnUrl);
+    }
+  });
+}
+```
+
+## Admin Authorization Flow
+
+<Steps>
+  <Step title="User Attempts Admin Route">
+    User navigates to `/new/admin`
+  </Step>
+  <Step title="authGuard Executes">
+    Verifies user is logged in (has JWT)
+  </Step>
+  <Step title="roleGuard Executes">
+    Checks if user has `ROLE_ADMIN` in roles array
+  </Step>
+  <Step title="Access Granted or Denied">
+    Admin users see dashboard; others redirected to `/new/error`
+  </Step>
+</Steps>
+
+```typescript Role Guard Logic
+const requiredRoles = route.data['roles'] as string[]; // ["ROLE_ADMIN"]
+if (authService.hasAnyRole(requiredRoles)) {
+  return true; // User has admin role
+}
+return router.createUrlTree(['new/error']); // Access denied
+```
+
+## Lazy Loading (Recommended Future Enhancement)
+
+For better performance, implement lazy loading for feature modules:
+
+```typescript
+const routes: Routes = [
+  {
+    path: 'admin',
+    loadChildren: () => import('./admin/admin.module').then(m => m.AdminModule),
+    canActivate: [authGuard, roleGuard],
+    data: { roles: ["ROLE_ADMIN"] }
+  }
+];
+```
+
+<Info>
+**Lazy loading** splits code into separate bundles that are loaded on-demand, reducing initial page load time.
+</Info>
+
+## Route Configuration Best Practices
+
+<AccordionGroup>
+  <Accordion title="Route Organization">
+    - Group related routes together
+    - Use consistent naming conventions
+    - Document route purposes with comments
+    - Keep wildcard route last
+  </Accordion>
+
+  <Accordion title="Guard Usage">
+    - Apply guards at the highest applicable level
+    - Combine guards for layered security
+    - Use route data for guard configuration
+    - Handle unauthorized access gracefully
+  </Accordion>
+
+  <Accordion title="Navigation">
+    - Use `routerLink` in templates when possible
+    - Prefer `router.navigate()` over `navigateByUrl()` for type safety
+    - Always handle navigation errors
+    - Preserve query parameters when needed
+  </Accordion>
+
+  <Accordion title="Performance">
+    - Implement lazy loading for large features
+    - Use route resolvers to pre-fetch data
+    - Avoid excessive route changes
+    - Consider route reuse strategies
+  </Accordion>
+</AccordionGroup>
+
+## Testing Routes and Guards
+
+### Testing Guards
+
+```typescript
+import { TestBed } from '@angular/core/testing';
+import { Router } from '@angular/router';
+import { authGuard } from './auth.guard';
+import { AuthService } from '../services/auth.service';
+
+describe('authGuard', () => {
+  let authService: jasmine.SpyObj<AuthService>;
+  let router: jasmine.SpyObj<Router>;
+
+  beforeEach(() => {
+    const authServiceSpy = jasmine.createSpyObj('AuthService', ['isLoggedIn']);
+    const routerSpy = jasmine.createSpyObj('Router', ['createUrlTree']);
+
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: AuthService, useValue: authServiceSpy },
+        { provide: Router, useValue: routerSpy }
+      ]
+    });
+
+    authService = TestBed.inject(AuthService) as jasmine.SpyObj<AuthService>;
+    router = TestBed.inject(Router) as jasmine.SpyObj<Router>;
+  });
+
+  it('should allow access when user is logged in', () => {
+    authService.isLoggedIn.and.returnValue(true);
+    const result = authGuard(null as any, { url: '/new/profile' } as any);
+    expect(result).toBe(true);
+  });
+
+  it('should redirect to login when user is not logged in', () => {
+    authService.isLoggedIn.and.returnValue(false);
+    authGuard(null as any, { url: '/new/profile' } as any);
+    expect(router.createUrlTree).toHaveBeenCalledWith(
+      ['new/login'],
+      { queryParams: { returnUrl: '/new/profile' } }
+    );
+  });
+});
+```
+
+## Common Routing Patterns
+
+### Breadcrumb Navigation
+
+```typescript
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { filter } from 'rxjs/operators';
+
+export class BreadcrumbComponent implements OnInit {
+  breadcrumbs: Array<{ label: string; url: string }> = [];
+
+  constructor(private router: Router, private route: ActivatedRoute) {}
+
+  ngOnInit() {
+    this.router.events
+      .pipe(filter(event => event instanceof NavigationEnd))
+      .subscribe(() => {
+        this.breadcrumbs = this.createBreadcrumbs(this.route.root);
+      });
+  }
+
+  private createBreadcrumbs(route: ActivatedRoute, url: string = '', breadcrumbs: any[] = []): any[] {
+    const children: ActivatedRoute[] = route.children;
+
+    if (children.length === 0) {
+      return breadcrumbs;
+    }
+
+    for (const child of children) {
+      const routeURL: string = child.snapshot.url.map(segment => segment.path).join('/');
+      if (routeURL !== '') {
+        url += `/${routeURL}`;
+      }
+
+      const label = child.snapshot.data['breadcrumb'];
+      if (label) {
+        breadcrumbs.push({ label, url });
+      }
+
+      return this.createBreadcrumbs(child, url, breadcrumbs);
+    }
+
+    return breadcrumbs;
+  }
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Angular Services" icon="code" href="/frontend/services">
+    Explore HTTP services and business logic
+  </Card>
+  <Card title="Component Architecture" icon="puzzle-piece" href="/frontend/components">
+    Learn about component structure
+  </Card>
+</CardGroup>

@@ -1,0 +1,458 @@
+---
+title: 'Application Configuration'
+description: 'Configure Spring Boot backend and Angular frontend settings'
+icon: 'gear'
+---
+
+## Overview
+
+Trippins uses separate configuration files for the Spring Boot backend and Angular frontend. This guide covers all configuration options and environment-specific settings.
+
+<Info>
+  Configuration can be overridden using environment variables in Docker deployments.
+</Info>
+
+## Spring Boot Configuration
+
+The main configuration file is located at `backend/src/main/resources/application.properties`.
+
+### Application Settings
+
+```properties
+spring.application.name=practica1
+spring.mustache.prefix=classpath:/templates/
+spring.mustache.suffix=.html
+```
+
+<ParamField path="spring.application.name" type="string">
+  Application identifier used in logging and monitoring
+</ParamField>
+
+<ParamField path="spring.mustache.prefix" type="string">
+  Template directory location for Mustache templates
+</ParamField>
+
+<ParamField path="spring.mustache.suffix" type="string">
+  File extension for Mustache template files
+</ParamField>
+
+### Database Configuration
+
+```properties
+# MySQL Database Connection
+spring.datasource.url=jdbc:mysql://localhost:3307/Trippins
+spring.datasource.username=root
+spring.datasource.password=1234
+spring.datasource.driver-class-name=com.mysql.cj.jdbc.Driver
+
+# JPA/Hibernate Settings
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.format_sql=true
+```
+
+<AccordionGroup>
+  <Accordion title="Database Connection">
+    <ParamField path="spring.datasource.url" type="string" required>
+      JDBC connection URL for MySQL database
+      
+      **Local**: `jdbc:mysql://localhost:3307/Trippins`
+      
+      **Docker**: `jdbc:mysql://db:3306/Trippins`
+    </ParamField>
+    
+    <ParamField path="spring.datasource.username" type="string" required>
+      Database username
+      
+      Default: `root`
+    </ParamField>
+    
+    <ParamField path="spring.datasource.password" type="string" required>
+      Database password
+      
+      **Local**: `1234`
+      
+      **Docker**: `password`
+    </ParamField>
+    
+    <ParamField path="spring.datasource.driver-class-name" type="string" required>
+      JDBC driver class
+      
+      Value: `com.mysql.cj.jdbc.Driver`
+    </ParamField>
+  </Accordion>
+  
+  <Accordion title="JPA/Hibernate Configuration">
+    <ParamField path="spring.jpa.hibernate.ddl-auto" type="string" required>
+      Database schema generation strategy
+      
+      Options:
+      - `update`: Update schema without dropping data
+      - `create`: Drop and recreate schema on startup
+      - `create-drop`: Create on startup, drop on shutdown
+      - `validate`: Validate schema matches entities
+      - `none`: No schema management
+      
+      Default: `update`
+    </ParamField>
+    
+    <ParamField path="spring.jpa.show-sql" type="boolean">
+      Enable SQL query logging in console
+      
+      Default: `true`
+    </ParamField>
+    
+    <ParamField path="spring.jpa.properties.hibernate.format_sql" type="boolean">
+      Format SQL queries for readability
+      
+      Default: `true`
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+### SSL/HTTPS Configuration
+
+```properties
+# Auto-signed certificate
+server.port=8443
+server.ssl.key-store=classpath:keystore.jks
+server.ssl.key-store-password=password
+server.ssl.key-password=password
+```
+
+<Warning>
+  The application uses a self-signed certificate for HTTPS. For production deployments, replace with a valid SSL certificate from a trusted Certificate Authority.
+</Warning>
+
+<ParamField path="server.port" type="number" required>
+  HTTPS port for the application server
+  
+  Default: `8443`
+</ParamField>
+
+<ParamField path="server.ssl.key-store" type="string" required>
+  Path to the Java KeyStore file containing the SSL certificate
+  
+  Default: `classpath:keystore.jks`
+</ParamField>
+
+<ParamField path="server.ssl.key-store-password" type="string" required>
+  Password for the KeyStore file
+</ParamField>
+
+<ParamField path="server.ssl.key-password" type="string" required>
+  Password for the private key in the KeyStore
+</ParamField>
+
+### Email Service Configuration
+
+```properties
+# Gmail SMTP Configuration
+spring.mail.host=smtp.gmail.com
+spring.mail.port=587
+spring.mail.username=trippins.urjc@gmail.com
+spring.mail.password=gzgymqgmeifnwoct
+
+# SMTP Properties
+spring.mail.properties.mail.smtp.auth=true
+spring.mail.properties.mail.smtp.starttls.enable=true
+spring.mail.properties.mail.smtp.starttls.required=true
+spring.mail.properties.mail.smtp.connectiontimeout=10000
+spring.mail.properties.mail.smtp.timeout=10000
+spring.mail.properties.mail.smtp.writetimeout=10000
+spring.mail.properties.mail.smtp.ssl.protocols=TLSv1.2
+spring.mail.properties.mail.smtp.ssl.trust=*
+spring.mail.properties.mail.smtp.debug=true
+```
+
+<Note>
+  The application uses Gmail's SMTP server for sending emails. An app-specific password is configured for authentication.
+</Note>
+
+<AccordionGroup>
+  <Accordion title="SMTP Server Settings">
+    <ParamField path="spring.mail.host" type="string" required>
+      SMTP server hostname
+      
+      Default: `smtp.gmail.com`
+    </ParamField>
+    
+    <ParamField path="spring.mail.port" type="number" required>
+      SMTP server port
+      
+      Default: `587` (TLS)
+    </ParamField>
+    
+    <ParamField path="spring.mail.username" type="string" required>
+      Email account username
+    </ParamField>
+    
+    <ParamField path="spring.mail.password" type="string" required>
+      Email account password (app-specific password for Gmail)
+    </ParamField>
+  </Accordion>
+  
+  <Accordion title="SMTP Connection Properties">
+    <ParamField path="spring.mail.properties.mail.smtp.auth" type="boolean">
+      Enable SMTP authentication
+      
+      Default: `true`
+    </ParamField>
+    
+    <ParamField path="spring.mail.properties.mail.smtp.starttls.enable" type="boolean">
+      Enable STARTTLS encryption
+      
+      Default: `true`
+    </ParamField>
+    
+    <ParamField path="spring.mail.properties.mail.smtp.starttls.required" type="boolean">
+      Require STARTTLS encryption
+      
+      Default: `true`
+    </ParamField>
+    
+    <ParamField path="spring.mail.properties.mail.smtp.connectiontimeout" type="number">
+      Connection timeout in milliseconds
+      
+      Default: `10000` (10 seconds)
+    </ParamField>
+    
+    <ParamField path="spring.mail.properties.mail.smtp.timeout" type="number">
+      General timeout in milliseconds
+      
+      Default: `10000` (10 seconds)
+    </ParamField>
+    
+    <ParamField path="spring.mail.properties.mail.smtp.writetimeout" type="number">
+      Write timeout in milliseconds
+      
+      Default: `10000` (10 seconds)
+    </ParamField>
+  </Accordion>
+</AccordionGroup>
+
+### Logging Configuration
+
+```properties
+logging.level.org.hibernate.SQL=DEBUG
+logging.level.org.hibernate.type.descriptor.sql.BasicBinder=TRACE
+logging.level.org.springframework.security=DEBUG
+```
+
+<ParamField path="logging.level.org.hibernate.SQL" type="string">
+  Log level for Hibernate SQL queries
+  
+  Options: `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`
+  
+  Default: `DEBUG`
+</ParamField>
+
+<ParamField path="logging.level.org.hibernate.type.descriptor.sql.BasicBinder" type="string">
+  Log level for SQL parameter binding
+  
+  Default: `TRACE`
+</ParamField>
+
+<ParamField path="logging.level.org.springframework.security" type="string">
+  Log level for Spring Security operations
+  
+  Default: `DEBUG`
+</ParamField>
+
+<Tip>
+  Set logging levels to `INFO` or `WARN` in production to reduce log verbosity.
+</Tip>
+
+### SPA Configuration
+
+```properties
+# Necessary for SPA application
+spring.mvc.pathmatch.matching-strategy=ant_path_matcher
+```
+
+<ParamField path="spring.mvc.pathmatch.matching-strategy" type="string" required>
+  Path matching strategy for Spring MVC
+  
+  Value: `ant_path_matcher` (required for Angular SPA routing)
+</ParamField>
+
+## Security Configuration
+
+Security settings are defined in `SecurityConfiguration.java`:
+
+### Authentication
+
+```java
+@Bean
+public PasswordEncoder passwordEncoder() {
+    return new BCryptPasswordEncoder();
+}
+```
+
+<Info>
+  Passwords are hashed using BCrypt with a default strength of 10.
+</Info>
+
+### JWT Configuration
+
+JWT tokens are used for stateless authentication:
+
+```java
+.sessionManagement(session -> session
+    .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+)
+.addFilterBefore(jwtRequestFilter, UsernamePasswordAuthenticationFilter.class)
+```
+
+<Note>
+  The JWT secret is configured via the `JWT_SECRET` environment variable in Docker deployments.
+</Note>
+
+### CORS Configuration
+
+Cross-Origin Resource Sharing is disabled by default:
+
+```java
+.csrf(csrf -> csrf.disable())
+```
+
+<Warning>
+  CSRF protection is disabled because the application uses stateless JWT authentication. Ensure proper JWT validation is in place.
+</Warning>
+
+### Authorization Rules
+
+<AccordionGroup>
+  <Accordion title="Public Endpoints">
+    Accessible without authentication:
+    ```java
+    .requestMatchers("/", "/index", "/about", "/contact", 
+                     "/register", "/error", "/v1/api/login/**", 
+                     "/css/**", "/js/**", "/images/**").permitAll()
+    .requestMatchers("/room", "/v1/api/query").permitAll()
+    .requestMatchers("/new", "/new/**").permitAll()
+    .requestMatchers(HttpMethod.POST, "/addUser", "/v1/api/users").permitAll()
+    .requestMatchers(HttpMethod.POST, "/v1/api/login/forms").permitAll()
+    ```
+  </Accordion>
+  
+  <Accordion title="Authenticated Endpoints">
+    Require valid authentication:
+    ```java
+    .requestMatchers("/room/{code}", "/roomDetails").authenticated()
+    .requestMatchers("/newHotel", "/booking", "/profile", 
+                     "/api/houses/**").authenticated()
+    ```
+  </Accordion>
+  
+  <Accordion title="User/Admin Endpoints">
+    Require USER or ADMIN role:
+    ```java
+    .requestMatchers(HttpMethod.POST, "/addHotel").hasAnyRole("USER", "ADMIN")
+    ```
+  </Accordion>
+  
+  <Accordion title="Admin-Only Endpoints">
+    Require ADMIN role:
+    ```java
+    .requestMatchers("/v1/api/users/**", "/v1/api/reviews/**", 
+                     "/v1/api/admin/**").hasRole("ADMIN")
+    .requestMatchers("/admin/**", "/admin").hasRole("ADMIN")
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Angular Frontend Configuration
+
+Frontend environment settings are in `frontend/src/environments/environment.ts`:
+
+```typescript
+export const environment = {
+    baseUrl: '/',
+    baseUrlApi: '/v1/api'
+};
+```
+
+<ParamField path="baseUrl" type="string" required>
+  Base URL for the application
+  
+  Default: `/`
+</ParamField>
+
+<ParamField path="baseUrlApi" type="string" required>
+  Base URL for API endpoints
+  
+  Default: `/v1/api`
+</ParamField>
+
+<Note>
+  Angular uses relative URLs that are proxied to the Spring Boot backend on the same domain.
+</Note>
+
+## Environment-Specific Configuration
+
+### Development
+
+```properties
+# Local development database
+spring.datasource.url=jdbc:mysql://localhost:3307/Trippins
+spring.datasource.password=1234
+
+# Enable debug logging
+logging.level.org.springframework.security=DEBUG
+logging.level.org.hibernate.SQL=DEBUG
+```
+
+### Docker/Production
+
+Environment variables override application.properties:
+
+```bash
+SPRING_DATASOURCE_URL=jdbc:mysql://db:3306/Trippins
+SPRING_DATASOURCE_USERNAME=root
+SPRING_DATASOURCE_PASSWORD=password
+JWT_SECRET=your-secret-key
+SERVER_SSL_ENABLED=true
+SERVER_PORT=8443
+```
+
+<Tip>
+  Use different JWT secrets for each environment and store them securely using secrets management tools.
+</Tip>
+
+## Configuration Best Practices
+
+<Steps>
+  <Step title="Externalize Secrets">
+    Never commit passwords, API keys, or JWT secrets to version control. Use environment variables or secret management services.
+  </Step>
+  
+  <Step title="Use Environment Profiles">
+    Create separate configuration files for different environments:
+    - `application-dev.properties`
+    - `application-prod.properties`
+  </Step>
+  
+  <Step title="Enable SSL in Production">
+    Always use valid SSL certificates in production. Replace the self-signed certificate with one from a trusted CA.
+  </Step>
+  
+  <Step title="Secure Database Credentials">
+    Use strong passwords and restrict database access to application servers only.
+  </Step>
+  
+  <Step title="Configure Logging">
+    Reduce logging verbosity in production to avoid performance issues and log file bloat.
+  </Step>
+</Steps>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Docker Deployment" icon="docker" href="/deployment/docker">
+    Deploy Trippins using Docker containers
+  </Card>
+  <Card title="Database Setup" icon="database" href="/deployment/database">
+    Configure the MySQL database and schema
+  </Card>
+</CardGroup>

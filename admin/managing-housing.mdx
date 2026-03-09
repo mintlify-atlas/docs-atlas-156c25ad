@@ -1,0 +1,522 @@
+---
+title: Managing Housing Listings
+description: Learn how administrators manage housing listings, approve new properties, and maintain the housing catalog
+---
+
+## Overview
+
+As a Trippins administrator, you have complete control over the housing catalog. This includes reviewing and approving new property submissions, editing existing listings, managing tags and categorization, and removing properties that violate platform policies.
+
+<Note>
+Admin privileges are required to access housing management features. Only users with the `ADMIN` role can perform these operations.
+</Note>
+
+## Housing Entity Structure
+
+The Housing entity is the core data model for all property listings in Trippins. Understanding its structure is essential for effective management.
+
+<CodeGroup>
+```java Housing.java
+@Entity
+public class Housing {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private int code;
+
+    @Column(name = "location", nullable = false)
+    private String location;
+
+    @Column(name = "name", nullable = false, unique = true, length = 100)
+    private String name;
+
+    @Lob
+    @Column(name = "image", columnDefinition = "LONGBLOB")
+    private Blob image;
+
+    @Column(name = "price", nullable = false)
+    private Integer price;
+
+    @Column(name = "description", nullable = false, length = 200)
+    private String description;
+
+    @Column(name = "stars", nullable = false)
+    private Integer stars;
+
+    @Column(name = "acepted", nullable = false)
+    protected Boolean acepted;
+
+    @ManyToMany
+    @JoinTable(
+        name = "housing_tags",
+        joinColumns = @JoinColumn(name = "housing_id"),
+        inverseJoinColumns = @JoinColumn(name = "tag_id")
+    )
+    private Set<Tag> tags;
+}
+```
+
+```java HousingDTO.java
+public class HousingDTO {
+    private int code;
+    private String location;
+    private String name;
+    private String imageBase64;
+    private Integer price;
+    private String description;
+    private Integer stars;
+    private Boolean acepted;
+    private Set<Tag> tags;
+}
+```
+</CodeGroup>
+
+### Key Fields
+
+<ParamField path="code" type="int">
+  Auto-generated unique identifier for the housing listing
+</ParamField>
+
+<ParamField path="acepted" type="Boolean">
+  Approval status. Only approved listings (`acepted = true`) are visible to regular users
+</ParamField>
+
+<ParamField path="image" type="Blob">
+  Property image stored as LONGBLOB, converted to Base64 for API responses
+</ParamField>
+
+<ParamField path="tags" type="Set<Tag>">
+  Many-to-many relationship with tags (e.g., "Beach", "City", "River") for categorization
+</ParamField>
+
+## Admin Workflows
+
+### Viewing All Housing Listings
+
+Administrators can retrieve all housing listings, including both approved and pending properties.
+
+<CodeGroup>
+```bash cURL
+curl -X GET "https://api.trippins.com/v1/api/houses" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://api.trippins.com/v1/api/houses', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const allHouses = await response.json();
+```
+
+```java Java (Service Layer)
+@Autowired
+HousingService housingService;
+
+public List<HousingDTO> getAllHouses() {
+    List<Housing> houses = housingRepository.findAll();
+    List<HousingDTO> housesDTOs = new ArrayList<>();
+    for (Housing house : houses) {
+        HousingDTO nuevoHouse = new HousingDTO(house);
+        housesDTOs.add(nuevoHouse);
+    }
+    return housesDTOs;
+}
+```
+</CodeGroup>
+
+<ResponseField name="Response" type="array">
+  Returns an array of all housing listings with complete details including approval status
+</ResponseField>
+
+### Filtering by Approval Status
+
+The service layer provides methods to filter housing by approval status using pagination.
+
+<Tabs>
+  <Tab title="Approved Listings">
+    ```java HousingService.java
+    public Page<HousingDTO> findByAceptedTrue(Pageable pageable) {
+        Page<Housing> houses = housingRepository.findByAceptedTrue(pageable);
+        
+        return houses.map(housing -> {
+            HousingDTO dto = new HousingDTO();
+            dto.setCode(housing.getCode());
+            dto.setLocation(housing.getLocation());
+            dto.setName(housing.getName());
+            dto.setPrice(housing.getPrice());
+            dto.setDescription(housing.getDescription());
+            dto.setStars(housing.getStars());
+            dto.setAcepted(housing.getAcepted());
+            dto.setImageBase64(housing.getImageBase64());
+            dto.setTags(housing.getTags());
+            return dto;
+        });
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Pending Listings">
+    ```java HousingService.java
+    public Page<HousingDTO> findByAceptedFalse(Pageable pageable) {
+        Page<Housing> houses = housingRepository.findByAceptedFalse(pageable);
+        
+        return houses.map(housing -> {
+            HousingDTO dto = new HousingDTO();
+            dto.setCode(housing.getCode());
+            dto.setLocation(housing.getLocation());
+            dto.setName(housing.getName());
+            dto.setPrice(housing.getPrice());
+            dto.setDescription(housing.getDescription());
+            dto.setStars(housing.getStars());
+            dto.setAcepted(housing.getAcepted());
+            dto.setImageBase64(housing.getImageBase64());
+            dto.setTags(housing.getTags());
+            return dto;
+        });
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Approving a Housing Listing
+
+When a new property is submitted, it starts with `acepted = false`. Administrators must review and approve it before it becomes visible to users.
+
+<CodeGroup>
+```java HousingService.java
+public void acceptHouse(int code) {
+    Housing house = housingRepository.findByCode(code).get();
+    house.setAcepted(true);
+    housingRepository.save(house);
+}
+```
+
+```bash cURL Example
+curl -X PUT "https://api.trippins.com/v1/api/houses/16" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "code": 16,
+    "location": "Ciudad de prueba",
+    "name": "Hotel prueba",
+    "price": 210,
+    "description": "Hotel de lujo con vistas panorámicas",
+    "stars": 5,
+    "acepted": true,
+    "tags": [{"id": "Beach"}]
+  }'
+```
+</CodeGroup>
+
+<Check>
+After approval, the listing immediately becomes visible in search results and the main catalog
+</Check>
+
+### Creating a New Housing Listing
+
+Administrators can create housing listings directly through the API.
+
+<Steps>
+  <Step title="Prepare the Housing Data">
+    Collect all required fields including location, name, price, description, star rating, and tags.
+  </Step>
+  
+  <Step title="Submit via API">
+    ```bash
+    curl -X POST "https://api.trippins.com/v1/api/houses" \
+      -H "Authorization: Bearer ADMIN_JWT_TOKEN" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "location": "Maldives",
+        "name": "Paradise Resort",
+        "price": 350,
+        "description": "Luxury beachfront resort with overwater bungalows",
+        "stars": 5,
+        "acepted": true,
+        "tags": [{"id": "Beach"}]
+      }'
+    ```
+  </Step>
+  
+  <Step title="Verify Creation">
+    The API returns the created housing with its auto-generated code:
+    ```json
+    {
+      "code": 21,
+      "location": "Maldives",
+      "name": "Paradise Resort",
+      "price": 350,
+      "description": "Luxury beachfront resort with overwater bungalows",
+      "stars": 5,
+      "acepted": true
+    }
+    ```
+  </Step>
+</Steps>
+
+### Updating Housing Details
+
+Administrators can update any aspect of a housing listing using the update endpoint.
+
+<CodeGroup>
+```java Controller
+@PutMapping("/{id}")
+public ResponseEntity<HousingDTO> updateHouse(
+    @PathVariable int id,
+    @RequestBody HousingDTO house) {
+    HousingDTO updatedHouse = housingService.updateHouse(id, house);
+    return ResponseEntity.ok(updatedHouse);
+}
+```
+
+```java Service
+public HousingDTO updateHouse(int code, HousingDTO house) {
+    Optional<Housing> originalHouse = housingRepository.findByCode(code);
+    Housing finalOriginalHouse = originalHouse.get();
+
+    finalOriginalHouse.setCode(house.getCode());
+    finalOriginalHouse.setLocation(house.getLocation());
+    finalOriginalHouse.setName(house.getName());
+    finalOriginalHouse.setImage(house.obtainImage(house.getImageBase64()));
+    finalOriginalHouse.setStars(house.getStars());
+    finalOriginalHouse.setPrice(house.getPrice());
+    finalOriginalHouse.setDescription(house.getDescription());
+    finalOriginalHouse.setAcepted(house.getAcepted());
+    finalOriginalHouse.setTags(house.getTags());
+
+    housingRepository.save(finalOriginalHouse);
+    return new HousingDTO(finalOriginalHouse);
+}
+```
+</CodeGroup>
+
+<Warning>
+Updating the `name` field requires caution as it must remain unique across all listings
+</Warning>
+
+### Deleting a Housing Listing
+
+Remove properties that violate policies or are no longer available.
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE "https://api.trippins.com/v1/api/houses/21" \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```java Service
+public void deleteHouse(int code) {
+    housingRepository.deleteById(code);
+}
+```
+</CodeGroup>
+
+<Info>
+Returns `204 No Content` on successful deletion. This operation is permanent and cannot be undone.
+</Info>
+
+## Managing Tags and Categories
+
+### Viewing Tags for a Housing
+
+Tags help users discover properties through filtered search. Each housing can have multiple tags.
+
+<CodeGroup>
+```bash API Request
+curl -X GET "https://api.trippins.com/v1/api/houses/1/tags" \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```java Service Implementation
+public Set<TagDTO> getTagsById(int id) {
+    Optional<Housing> house = housingRepository.findById(id);
+    Set<Tag> tags = house.get().getTags();
+    Set<TagDTO> tagDTOs = tags.stream()
+            .map(tag -> new TagDTO(tag.getId()))
+            .collect(Collectors.toSet());
+    return tagDTOs;
+}
+```
+</CodeGroup>
+
+**Response Example:**
+```json
+[
+  {"id": "Beach"},
+  {"id": "City"}
+]
+```
+
+### Available Tag Types
+
+The platform supports the following tag categories:
+
+<CardGroup cols={3}>
+  <Card title="Beach" icon="umbrella-beach">
+    Properties located near beaches or coastal areas
+  </Card>
+  <Card title="City" icon="city">
+    Urban properties in city centers
+  </Card>
+  <Card title="River" icon="water">
+    Properties with river views or riverside locations
+  </Card>
+</CardGroup>
+
+## Security and Permissions
+
+### Role-Based Access Control
+
+Housing management endpoints require the `ADMIN` role. This is enforced at the security configuration level:
+
+```java SecurityConfiguration.java
+@Bean
+public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    http.authorizeHttpRequests(auth -> auth
+        .requestMatchers(HttpMethod.POST, "/addHotel").hasAnyRole("USER", "ADMIN")
+        .requestMatchers("/v1/api/users/**","/v1/api/reviews/**","/v1/api/admin/**")
+            .hasRole("ADMIN")
+        .requestMatchers("/admin/**", "/admin").hasRole("ADMIN")
+        // ...
+    );
+    return http.build();
+}
+```
+
+### JWT Authentication
+
+All admin operations require a valid JWT token with admin privileges:
+
+<CodeGroup>
+```bash Authorization Header
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+```java Admin User Entity
+@Entity
+public class Admin extends User {
+    public Admin(String dni, String name, Integer number, 
+                 String password, String email) {
+        super(dni, name, number, password, email);
+        this.admin = true;  // ✅ Admin flag set to true
+    }
+}
+```
+</CodeGroup>
+
+<Warning>
+Attempting to access admin endpoints without the `ADMIN` role returns `403 Forbidden`
+</Warning>
+
+## API Reference
+
+### Housing Management Endpoints
+
+<ResponseField name="GET /v1/api/houses" type="GET">
+  Retrieve all housing listings (both approved and pending)
+  
+  **Security**: Requires JWT authentication
+  
+  **Response**: `200 OK` with array of HousingDTO objects
+</ResponseField>
+
+<ResponseField name="GET /v1/api/houses/{id}" type="GET">
+  Get a specific housing listing by code
+  
+  **Parameters**: 
+  - `id` (path) - Housing code (e.g., 1)
+  
+  **Response**: `200 OK` with HousingDTO object
+</ResponseField>
+
+<ResponseField name="POST /v1/api/houses" type="POST">
+  Create a new housing listing
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Body**: HousingDTO object (code is auto-generated)
+  
+  **Response**: `201 Created` with created HousingDTO
+</ResponseField>
+
+<ResponseField name="PUT /v1/api/houses/{id}" type="PUT">
+  Update an existing housing listing
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Parameters**: 
+  - `id` (path) - Housing code to update
+  
+  **Body**: Complete HousingDTO object
+  
+  **Response**: `200 OK` with updated HousingDTO
+</ResponseField>
+
+<ResponseField name="DELETE /v1/api/houses/{id}" type="DELETE">
+  Delete a housing listing
+  
+  **Security**: Requires `ADMIN` role
+  
+  **Parameters**: 
+  - `id` (path) - Housing code to delete
+  
+  **Response**: `204 No Content`
+</ResponseField>
+
+<ResponseField name="GET /v1/api/houses/{id}/tags" type="GET">
+  Get all tags associated with a housing
+  
+  **Parameters**: 
+  - `id` (path) - Housing code
+  
+  **Response**: `200 OK` with Set of TagDTO objects
+</ResponseField>
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Verify Listing Quality Before Approval">
+    Always review property descriptions, images, and pricing for accuracy before setting `acepted = true`. Ensure the listing meets platform quality standards.
+  </Accordion>
+  
+  <Accordion title="Use Consistent Tag Categorization">
+    Apply tags consistently across similar properties. A beach resort should always have the "Beach" tag for accurate filtering.
+  </Accordion>
+  
+  <Accordion title="Handle Image Data Properly">
+    Images are stored as BLOBs in the database and converted to Base64 for API responses. Ensure images are optimized before upload to prevent database bloat.
+  </Accordion>
+  
+  <Accordion title="Validate Unique Constraints">
+    The `name` field must be unique. Check for duplicates before creating or updating housing listings to avoid constraint violations.
+  </Accordion>
+  
+  <Accordion title="Archive Instead of Delete When Possible">
+    Consider setting `acepted = false` instead of deleting listings to maintain reservation history and data integrity.
+  </Accordion>
+</AccordionGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="403 Forbidden on Admin Endpoints">
+    **Cause**: Missing or invalid admin role in JWT token
+    
+    **Solution**: Verify that the authenticated user has `admin = true` in the User entity and the JWT contains `ROLE_ADMIN`
+  </Accordion>
+  
+  <Accordion title="Duplicate Name Error">
+    **Cause**: Attempting to create/update housing with a name that already exists
+    
+    **Solution**: Choose a unique name or modify the existing listing instead
+  </Accordion>
+  
+  <Accordion title="Image Not Displaying">
+    **Cause**: Improper Base64 encoding or BLOB conversion
+    
+    **Solution**: Ensure images are properly converted using the `getImageBase64()` method from the Housing entity
+  </Accordion>
+</AccordionGroup>

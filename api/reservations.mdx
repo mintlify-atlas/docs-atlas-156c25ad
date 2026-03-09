@@ -1,0 +1,488 @@
+---
+title: 'Reservation Management'
+description: 'API endpoints for managing hotel reservations and bookings'
+---
+
+## Overview
+
+The Reservation Management API provides endpoints for creating, reading, updating, and deleting reservations. Reservations link users (clients) to housing listings with specific check-in and check-out dates.
+
+<Note>
+All endpoints require JWT authentication via the `Authorization: Bearer {token}` header.
+</Note>
+
+---
+
+## Get All Reservations
+
+Retrieve a list of all reservations in the system.
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://localhost:8443/v1/api/reservations \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const response = await fetch('https://localhost:8443/v1/api/reservations', {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const reservations = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+<ResponseField name="reservations" type="array">
+  Array of ReservationDTO objects
+  
+  <Expandable title="ReservationDTO properties">
+    <ResponseField name="id" type="integer" required>
+      Auto-generated unique identifier for the reservation (read-only)
+    </ResponseField>
+    
+    <ResponseField name="checkIn" type="string" required>
+      Check-in date and time (ISO 8601 format: YYYY-MM-DD or datetime)
+    </ResponseField>
+    
+    <ResponseField name="checkOut" type="string" required>
+      Check-out date and time (ISO 8601 format: YYYY-MM-DD or datetime)
+    </ResponseField>
+    
+    <ResponseField name="valorated" type="boolean" required>
+      Whether the reservation has been rated/reviewed by the client
+    </ResponseField>
+    
+    <ResponseField name="clientDni" type="string" required>
+      DNI (national ID) of the client who made the reservation
+    </ResponseField>
+    
+    <ResponseField name="housingCode" type="integer" required>
+      Code/ID of the housing being reserved
+    </ResponseField>
+    
+    <ResponseField name="housingName" type="string" required>
+      Name of the housing/hotel
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<Accordion title="Example Response">
+```json
+[
+  {
+    "id": 1,
+    "checkIn": "2024-06-15T14:00:00",
+    "checkOut": "2024-06-20T11:00:00",
+    "valorated": true,
+    "clientDni": "11223344C",
+    "housingCode": 1,
+    "housingName": "Hotel Mediterranean"
+  },
+  {
+    "id": 2,
+    "checkIn": "2024-07-01T15:00:00",
+    "checkOut": "2024-07-05T10:00:00",
+    "valorated": false,
+    "clientDni": "99887766B",
+    "housingCode": 2,
+    "housingName": "City Center Apartments"
+  }
+]
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Successfully retrieved list of reservations |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Get Reservation by ID
+
+Retrieve a specific reservation by its ID.
+
+<ParamField path="id" type="integer" required>
+  ID of the reservation to retrieve (e.g., 1)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X GET https://localhost:8443/v1/api/reservations/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const reservationId = 1;
+const response = await fetch(`https://localhost:8443/v1/api/reservations/${reservationId}`, {
+  method: 'GET',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+const reservation = await response.json();
+```
+</CodeGroup>
+
+### Response
+
+Returns a single ReservationDTO object with all reservation details.
+
+<Accordion title="Example Response">
+```json
+{
+  "id": 1,
+  "checkIn": "2024-06-15T14:00:00",
+  "checkOut": "2024-06-20T11:00:00",
+  "valorated": true,
+  "clientDni": "11223344C",
+  "housingCode": 1,
+  "housingName": "Hotel Mediterranean"
+}
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Successfully retrieved reservation |
+| 404 | Reservation not found |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Create Reservation
+
+Create a new reservation with the provided details.
+
+<CodeGroup>
+```bash cURL
+curl -X POST https://localhost:8443/v1/api/reservations \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "checkIn": "2024-08-10T15:00:00",
+    "checkOut": "2024-08-15T11:00:00",
+    "valorated": false,
+    "clientDni": "11223344C",
+    "housingCode": 1,
+    "housingName": "Hotel Mediterranean"
+  }'
+```
+
+```javascript JavaScript
+const reservationData = {
+  checkIn: '2024-08-10T15:00:00',
+  checkOut: '2024-08-15T11:00:00',
+  valorated: false,
+  clientDni: '11223344C',
+  housingCode: 1,
+  housingName: 'Hotel Mediterranean'
+};
+
+const response = await fetch('https://localhost:8443/v1/api/reservations', {
+  method: 'POST',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(reservationData)
+});
+
+const newReservation = await response.json();
+```
+</CodeGroup>
+
+### Request Body
+
+<ParamField body="checkIn" type="string" required>
+  Check-in date and time in ISO 8601 format (e.g., "2024-08-10T15:00:00" or "2024-08-10")
+</ParamField>
+
+<ParamField body="checkOut" type="string" required>
+  Check-out date and time in ISO 8601 format (e.g., "2024-08-15T11:00:00" or "2024-08-15")
+</ParamField>
+
+<ParamField body="valorated" type="boolean">
+  Whether the reservation has been rated (default: false for new reservations)
+</ParamField>
+
+<ParamField body="clientDni" type="string" required>
+  DNI of the client making the reservation (must be an existing user)
+</ParamField>
+
+<ParamField body="housingCode" type="integer" required>
+  Code/ID of the housing to reserve (must be an existing housing listing)
+</ParamField>
+
+<ParamField body="housingName" type="string" required>
+  Name of the housing (should match the housingCode)
+</ParamField>
+
+### Response
+
+Returns the created reservation with an auto-generated ID.
+
+<Accordion title="Example Response">
+```json
+{
+  "id": 3,
+  "checkIn": "2024-08-10T15:00:00",
+  "checkOut": "2024-08-15T11:00:00",
+  "valorated": false,
+  "clientDni": "11223344C",
+  "housingCode": 1,
+  "housingName": "Hotel Mediterranean"
+}
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 201 | Reservation created successfully |
+| 400 | Invalid input (e.g., invalid dates, non-existent client or housing) |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Update Reservation
+
+Update an existing reservation.
+
+<ParamField path="id" type="integer" required>
+  ID of the reservation to update (e.g., 1)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X PUT https://localhost:8443/v1/api/reservations/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "checkIn": "2024-08-12T14:00:00",
+    "checkOut": "2024-08-17T12:00:00",
+    "valorated": false,
+    "clientDni": "11223344C",
+    "housingCode": 1,
+    "housingName": "Hotel Mediterranean"
+  }'
+```
+
+```javascript JavaScript
+const reservationId = 1;
+const updateData = {
+  checkIn: '2024-08-12T14:00:00',
+  checkOut: '2024-08-17T12:00:00',
+  valorated: false,
+  clientDni: '11223344C',
+  housingCode: 1,
+  housingName: 'Hotel Mediterranean'
+};
+
+const response = await fetch(`https://localhost:8443/v1/api/reservations/${reservationId}`, {
+  method: 'PUT',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN',
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify(updateData)
+});
+
+const updatedReservation = await response.json();
+```
+</CodeGroup>
+
+### Request Body
+
+All ReservationDTO fields can be updated (see Create Reservation for field descriptions).
+
+<Warning>
+Changing `clientDni` or `housingCode` will reassign the reservation to a different client or housing.
+</Warning>
+
+### Response
+
+Returns the updated reservation.
+
+<Accordion title="Example Response">
+```json
+{
+  "id": 1,
+  "checkIn": "2024-08-12T14:00:00",
+  "checkOut": "2024-08-17T12:00:00",
+  "valorated": false,
+  "clientDni": "11223344C",
+  "housingCode": 1,
+  "housingName": "Hotel Mediterranean"
+}
+```
+</Accordion>
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 200 | Reservation updated successfully |
+| 404 | Reservation not found |
+| 400 | Invalid input |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Delete Reservation
+
+Delete a reservation by its ID.
+
+<ParamField path="id" type="integer" required>
+  ID of the reservation to delete (e.g., 1)
+</ParamField>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://localhost:8443/v1/api/reservations/1 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const reservationId = 1;
+const response = await fetch(`https://localhost:8443/v1/api/reservations/${reservationId}`, {
+  method: 'DELETE',
+  headers: {
+    'Authorization': 'Bearer YOUR_JWT_TOKEN'
+  }
+});
+
+if (response.status === 204) {
+  console.log('Reservation deleted successfully');
+}
+```
+</CodeGroup>
+
+### Response
+
+No content is returned on successful deletion.
+
+### Status Codes
+
+| Code | Description |
+|------|-------------|
+| 204 | Reservation deleted successfully |
+| 404 | Reservation not found |
+| 403 | Forbidden - Access denied |
+
+---
+
+## Admin Reservation Management
+
+Administrators have additional endpoints for managing reservations:
+
+### Accept Reservation
+
+<Info>
+Requires ADMIN role. Marks a reservation as accepted by setting the `valorated` field to true.
+</Info>
+
+<CodeGroup>
+```bash cURL
+curl -X PUT https://localhost:8443/v1/api/admin/reservations/decision/1 \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const reservationId = 1;
+const response = await fetch(`https://localhost:8443/v1/api/admin/reservations/decision/${reservationId}`, {
+  method: 'PUT',
+  headers: {
+    'Authorization': 'Bearer ADMIN_JWT_TOKEN'
+  }
+});
+```
+</CodeGroup>
+
+**Status Codes:**
+- `200` - Reservation accepted successfully
+- `404` - Reservation not found
+- `403` - Forbidden (requires ADMIN role)
+- `401` - Unauthorized (invalid JWT)
+
+### Deny Reservation
+
+<Info>
+Requires ADMIN role. Denies and deletes a reservation from the system.
+</Info>
+
+<CodeGroup>
+```bash cURL
+curl -X DELETE https://localhost:8443/v1/api/admin/reservations/decision/1 \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```javascript JavaScript
+const reservationId = 1;
+const response = await fetch(`https://localhost:8443/v1/api/admin/reservations/decision/${reservationId}`, {
+  method: 'DELETE',
+  headers: {
+    'Authorization': 'Bearer ADMIN_JWT_TOKEN'
+  }
+});
+```
+</CodeGroup>
+
+**Status Codes:**
+- `204` - Reservation denied and removed successfully
+- `404` - Reservation not found
+- `403` - Forbidden (requires ADMIN role)
+- `401` - Unauthorized (invalid JWT)
+
+---
+
+## Date Handling
+
+The API uses SQL Date format internally but accepts ISO 8601 datetime strings. Dates can be provided in the following formats:
+
+- `YYYY-MM-DD` (e.g., "2024-08-10")
+- `YYYY-MM-DDTHH:mm:ss` (e.g., "2024-08-10T15:00:00")
+
+<Tip>
+Always ensure `checkOut` date is after `checkIn` date to avoid validation errors.
+</Tip>
+
+## Authentication
+
+All Reservation Management endpoints require JWT authentication:
+
+```
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+```
+
+Admin-specific endpoints require a JWT token with the `ROLE_ADMIN` role.
+
+## Error Responses
+
+<ResponseField name="error" type="string">
+  Error type
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Detailed error message
+</ResponseField>
+
+<Accordion title="Example Error Response">
+```json
+{
+  "error": "Bad Request",
+  "message": "Check-out date must be after check-in date"
+}
+```
+</Accordion>

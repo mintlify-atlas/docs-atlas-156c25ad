@@ -1,0 +1,630 @@
+---
+title: 'Writing Reviews'
+description: 'Learn how to write and submit property reviews on the Trippins platform'
+---
+
+## Overview
+
+Reviews are an essential part of the Trippins experience, allowing guests to share their experiences and help future travelers make informed decisions. This guide covers how to write, submit, and view reviews for hotel properties.
+
+<Warning>
+  You must be logged in to write reviews. Anonymous users cannot submit reviews.
+</Warning>
+
+## Review Data Structure
+
+Each review contains the following information:
+
+<CodeGroup>
+```typescript TypeScript Interface
+interface ReviewDTO {
+  reviewId?: number;     // Auto-generated
+  rating: number;        // 0-100 (percentage)
+  comment: string;       // Review text
+  hotelCode: number;     // Property code
+  userName: string;      // Reviewer's name
+  userDni: string;       // Reviewer's DNI
+}
+```
+
+```java Java DTO
+public class ReviewDTO {
+    @Schema(accessMode = AccessMode.READ_ONLY)
+    private Integer reviewId;
+    
+    private Integer rating;      // 0 to 100
+    private String comment;
+    private int hotelCode;
+    private String userName;
+    private String userDni;
+}
+```
+</CodeGroup>
+
+## Rating System
+
+### Percentage-Based Ratings
+
+Trippins uses a unique 0-100 percentage rating system instead of traditional star ratings:
+
+<CardGroup cols={4}>
+  <Card title="0-24%" icon="face-frown" color="#ef4444">
+    Poor
+  </Card>
+  <Card title="25-49%" icon="face-meh" color="#f59e0b">
+    Average
+  </Card>
+  <Card title="50-74%" icon="face-smile" color="#3b82f6">
+    Good
+  </Card>
+  <Card title="75-100%" icon="face-grin-stars" color="#22c55e">
+    Excellent
+  </Card>
+</CardGroup>
+
+### Rating Display Logic
+
+```typescript
+getRatingWidth(rating: number): string {
+  return `${rating}%`;
+}
+
+getRatingClass(rating: number): string {
+  if (rating < 25) {
+    return 'poor';
+  } else if (rating < 50) {
+    return 'average';
+  } else if (rating < 75) {
+    return 'good';
+  } else {
+    return 'excellent';
+  }
+}
+```
+
+This allows for visual representation with color-coded progress bars or stars.
+
+## Writing a Review
+
+### Review Form Component
+
+```typescript
+@Component({
+  selector: 'app-room-details',
+  templateUrl: './room-details.component.html'
+})
+export class RoomDetailsComponent {
+  commentForm: FormGroup;
+  clientDni: string | null = null;
+  clientName: string | null = null;
+
+  constructor(
+    private fb: FormBuilder,
+    public authService: AuthService,
+    private reviewService: ReviewServiceService
+  ) {
+    this.commentForm = this.fb.group({
+      comment: ['', [Validators.required, Validators.minLength(10)]],
+      rating: [50, [Validators.required, Validators.min(0), Validators.max(100)]]
+    });
+  }
+
+  ngOnInit(): void {
+    // Get current user information
+    this.authService.getUserDni().subscribe(dni => {
+      this.clientDni = dni;
+    });
+    this.authService.getUserName().subscribe(name => {
+      this.clientName = name;
+    });
+  }
+}
+```
+
+### Form Validation
+
+<AccordionGroup>
+  <Accordion title="Comment Length">
+    Minimum 10 characters required to ensure meaningful feedback
+  </Accordion>
+  
+  <Accordion title="Rating Range">
+    Must be between 0 and 100 (inclusive)
+  </Accordion>
+  
+  <Accordion title="User Authentication">
+    Must be logged in with valid JWT token
+  </Accordion>
+  
+  <Accordion title="Property Association">
+    Must have selected a valid property (hotelCode)
+  </Accordion>
+</AccordionGroup>
+
+### Submitting a Review
+
+<Steps>
+  <Step title="Navigate to property details">
+    Go to the property page where you want to leave a review
+  </Step>
+  <Step title="Fill review form">
+    Enter your rating (0-100) and comment (min 10 characters)
+  </Step>
+  <Step title="Submit review">
+    Click the submit button to post your review
+  </Step>
+  <Step title="Confirmation">
+    See success message and your review in the list
+  </Step>
+</Steps>
+
+```typescript
+onSubmitComment(): void {
+  // Validate form and authentication
+  if (this.commentForm.invalid || !this.house || !this.authService.isLoggedIn()) {
+    return;
+  }
+
+  // Prepare review data
+  const commentData = {
+    ...this.commentForm.value,
+    hotelCode: this.house.code,
+    userDni: this.clientDni,
+    userName: this.clientName
+  };
+
+  // Submit to API
+  this.reviewService.createReview(commentData).subscribe({
+    next: () => {
+      Swal.fire({
+        title: 'Comentario creado de manera exitosa! 🎉',
+        text: 'Tu comentario fue creado correctamente.',
+        icon: 'success',
+        confirmButtonText: '¡Genial!',
+        backdrop: true
+      });
+      
+      // Reset form and reload comments
+      this.commentForm.reset();
+      this.loadComments(this.house!.code, 1);
+    },
+    error: (err: any) => {
+      Swal.fire({
+        title: 'Oops 😬',
+        text: 'Hubo un error al crear el comentario.',
+        icon: 'error',
+        confirmButtonText: 'Intentar de nuevo'
+      });
+      console.error('Error submitting comment:', err);
+    }
+  });
+}
+```
+
+## API Endpoints
+
+### Create Review
+
+<Card title="POST /v1/api/reviews" icon="comment-plus">
+  Submit a new review for a property (requires authentication)
+</Card>
+
+<ParamField body="rating" type="number" required>
+  Rating from 0 to 100
+</ParamField>
+
+<ParamField body="comment" type="string" required>
+  Review text (minimum 10 characters)
+</ParamField>
+
+<ParamField body="hotelCode" type="number" required>
+  Property code being reviewed
+</ParamField>
+
+<ParamField body="userDni" type="string" required>
+  Reviewer's DNI from authenticated session
+</ParamField>
+
+<ParamField body="userName" type="string" required>
+  Reviewer's display name
+</ParamField>
+
+```bash
+curl -X POST http://localhost:8080/v1/api/reviews \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rating": 85,
+    "comment": "Wonderful stay! The ocean view was breathtaking and the staff was incredibly friendly.",
+    "hotelCode": 5,
+    "userDni": "12345678A",
+    "userName": "John Doe"
+  }'
+```
+
+### Backend Controller
+
+```java
+@RestController
+@RequestMapping("/v1/api/reviews")
+@Tag(name = "Review Management")
+public class ReviewRestController {
+
+    @Autowired
+    private ReviewService reviewService;
+
+    @Operation(summary = "Create a new review")
+    @ApiResponses(value = {
+        @ApiResponse(responseCode = "201", description = "Review created successfully"),
+        @ApiResponse(responseCode = "400", description = "Invalid input"),
+        @ApiResponse(responseCode = "403", description = "Forbidden - Access denied")
+    })
+    @SecurityRequirement(name = "JWT")
+    @PostMapping
+    public ResponseEntity<ReviewDTO> createReview(@RequestBody ReviewDTO review) {
+        ReviewDTO createdReview = reviewService.createReview(review);
+        return ResponseEntity.status(HttpStatus.CREATED).body(createdReview);
+    }
+}
+```
+
+## Viewing Reviews
+
+### Paginated Review Loading
+
+Reviews are loaded with pagination to handle properties with many reviews:
+
+```typescript
+loadComments(code: number, page: number): void {
+  this.isLoading = true;
+  
+  this.reviewService.getPaginatedComments(code, page).subscribe({
+    next: (comments: any) => {
+      // Append new comments to existing list
+      this.comments = [...this.comments, ...comments.content];
+      this.currentPage = page;
+      this.isLoading = false;
+    },
+    error: (err: any) => {
+      console.error('Error loading comments:', err);
+      this.isLoading = false;
+    }
+  });
+}
+
+// Load more comments when user scrolls
+loadMoreComments(): void {
+  if (this.house) {
+    this.loadComments(this.house.code, this.currentPage + 1);
+  }
+}
+```
+
+### Review Display
+
+```typescript
+<div *ngFor="let comment of comments" class="review-card">
+  <div class="review-header">
+    <span class="reviewer-name">{{ comment.userName }}</span>
+    <div class="rating-display" [ngClass]="getRatingClass(comment.rating)">
+      <div class="rating-bar" [style.width]="getRatingWidth(comment.rating)"></div>
+    </div>
+  </div>
+  <p class="review-comment">{{ comment.comment }}</p>
+</div>
+```
+
+## Managing Reviews
+
+### Get All Reviews (Admin)
+
+<Card title="GET /v1/api/reviews" icon="list">
+  Retrieve all reviews (admin only)
+</Card>
+
+```bash
+curl http://localhost:8080/v1/api/reviews \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```java
+@GetMapping
+@SecurityRequirement(name = "JWT")
+public ResponseEntity<List<ReviewDTO>> getAllReviews() {
+    List<ReviewDTO> reviewDTOs = reviewService.getAllReviews();
+    return ResponseEntity.ok(reviewDTOs);
+}
+```
+
+<Warning>
+  Only users with `ROLE_ADMIN` can access the full list of all reviews across all properties.
+</Warning>
+
+### Get Specific Review
+
+<Card title="GET /v1/api/reviews/{id}" icon="comment">
+  Get details of a specific review
+</Card>
+
+```bash
+curl http://localhost:8080/v1/api/reviews/123 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+```java
+@GetMapping("/{id}")
+@SecurityRequirement(name = "JWT")
+public ResponseEntity<ReviewDTO> getReviewById(@PathVariable Integer id) {
+    ReviewDTO review = reviewService.getReviewById(id);
+    return ResponseEntity.ok(review);
+}
+```
+
+### Update Review
+
+<Card title="PUT /v1/api/reviews/{id}" icon="pen-to-square">
+  Modify an existing review
+</Card>
+
+```bash
+curl -X PUT http://localhost:8080/v1/api/reviews/123 \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "rating": 90,
+    "comment": "Updated: Even better than I initially thought!",
+    "hotelCode": 5,
+    "userDni": "12345678A",
+    "userName": "John Doe"
+  }'
+```
+
+<Tip>
+  Consider implementing business rules such as:
+  - Users can only edit their own reviews
+  - Reviews can only be edited within 24 hours of posting
+  - Show "edited" indicator on modified reviews
+</Tip>
+
+### Delete Review
+
+<Card title="DELETE /v1/api/reviews/{id}" icon="trash">
+  Remove a review (admin only)
+</Card>
+
+```bash
+curl -X DELETE http://localhost:8080/v1/api/reviews/123 \
+  -H "Authorization: Bearer ADMIN_JWT_TOKEN"
+```
+
+```java
+@DeleteMapping("/{id}")
+@SecurityRequirement(name = "JWT") 
+public ResponseEntity<Void> deleteReview(@PathVariable Integer id) {
+    reviewService.deleteReview(id);
+    return ResponseEntity.noContent().build();
+}
+```
+
+## Review Entity Relationships
+
+The review entity connects users and housing properties:
+
+```java
+public class Review {
+    private Integer reviewId;
+    private Integer rating;
+    private String comment;
+    
+    // Foreign key relationships
+    private Housing hotel;    // Link to Housing entity
+    private User user;        // Link to User entity
+}
+```
+
+The DTO simplifies this by using:
+- `hotelCode` instead of full Housing object
+- `userDni` and `userName` instead of full User object
+
+## Integration with Reservations
+
+### Linking Reviews to Stays
+
+Best practice: Only allow reviews from users who have stayed at the property
+
+```typescript
+// Check if user has a completed reservation
+canWriteReview(userDni: string, hotelCode: number): Observable<boolean> {
+  return this.reservationService.getUserReservations(userDni).pipe(
+    map(reservations => {
+      return reservations.some(res => 
+        res.housingCode === hotelCode && 
+        new Date(res.checkOut) < new Date() &&
+        !res.valorated  // Not yet reviewed
+      );
+    })
+  );
+}
+```
+
+### Updating Reservation After Review
+
+When a user submits a review, mark the reservation as reviewed:
+
+```typescript
+onSubmitComment(): void {
+  const reviewData = { /* ... */ };
+  
+  this.reviewService.createReview(reviewData).subscribe({
+    next: () => {
+      // Mark reservation as valorated
+      if (this.currentReservationId) {
+        this.reservationService.updateReservation(this.currentReservationId, {
+          ...this.reservation,
+          valorated: true
+        }).subscribe();
+      }
+      
+      // Show success message and reload
+      this.showSuccessMessage();
+      this.loadComments(this.house!.code, 1);
+    }
+  });
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Content Moderation">
+    Implement profanity filtering and spam detection:
+    ```typescript
+    validateReviewContent(comment: string): boolean {
+      const bannedWords = ['spam', 'inappropriate'];
+      return !bannedWords.some(word => comment.toLowerCase().includes(word));
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Rate Limiting">
+    Prevent review spam by limiting submissions:
+    - One review per property per user
+    - Cooldown period between reviews
+    - Verify completed reservation before allowing review
+  </Accordion>
+  
+  <Accordion title="Review Helpfulness">
+    Add voting system for helpful reviews:
+    ```typescript
+    interface Review {
+      // ... existing fields
+      helpfulCount: number;
+      notHelpfulCount: number;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Response to Reviews">
+    Allow property owners to respond to reviews to improve engagement and address concerns.
+  </Accordion>
+</AccordionGroup>
+
+## UI/UX Recommendations
+
+### Review Form Best Practices
+
+<Steps>
+  <Step title="Visual rating input">
+    Use slider or star selector for intuitive rating input
+  </Step>
+  <Step title="Character counter">
+    Show real-time character count (min 10 required)
+  </Step>
+  <Step title="Preview">
+    Let users preview their review before submitting
+  </Step>
+  <Step title="Guidelines">
+    Display review guidelines and terms of service
+  </Step>
+</Steps>
+
+### Review Display
+
+```typescript
+<div class="review-list">
+  <!-- Sort options -->
+  <select [(ngModel)]="sortBy" (change)="sortReviews()">
+    <option value="newest">Newest First</option>
+    <option value="highest">Highest Rating</option>
+    <option value="lowest">Lowest Rating</option>
+  </select>
+
+  <!-- Review cards -->
+  <div *ngFor="let review of comments" class="review-card">
+    <div class="review-header">
+      <span class="reviewer">{{ review.userName }}</span>
+      <span class="rating" [ngClass]="getRatingClass(review.rating)">
+        {{ review.rating }}%
+      </span>
+    </div>
+    <p class="comment">{{ review.comment }}</p>
+  </div>
+
+  <!-- Load more button -->
+  <button *ngIf="hasMoreReviews" (click)="loadMoreComments()">
+    Load More Reviews
+  </button>
+</div>
+```
+
+## Analytics and Insights
+
+### Calculate Average Rating
+
+```typescript
+calculateAverageRating(reviews: ReviewDTO[]): number {
+  if (reviews.length === 0) return 0;
+  
+  const sum = reviews.reduce((acc, review) => acc + review.rating, 0);
+  return Math.round(sum / reviews.length);
+}
+```
+
+### Rating Distribution
+
+```typescript
+getRatingDistribution(reviews: ReviewDTO[]): RatingDistribution {
+  return {
+    excellent: reviews.filter(r => r.rating >= 75).length,
+    good: reviews.filter(r => r.rating >= 50 && r.rating < 75).length,
+    average: reviews.filter(r => r.rating >= 25 && r.rating < 50).length,
+    poor: reviews.filter(r => r.rating < 25).length
+  };
+}
+```
+
+## Error Handling
+
+<AccordionGroup>
+  <Accordion title="401 Unauthorized">
+    User not logged in - redirect to login page
+  </Accordion>
+  
+  <Accordion title="400 Bad Request">
+    - Comment too short (< 10 characters)
+    - Invalid rating (outside 0-100 range)
+    - Missing required fields
+  </Accordion>
+  
+  <Accordion title="403 Forbidden">
+    User trying to edit/delete another user's review
+  </Accordion>
+  
+  <Accordion title="404 Not Found">
+    Property doesn't exist or review ID invalid
+  </Accordion>
+  
+  <Accordion title="409 Conflict">
+    User already reviewed this property (if enforcing one review per property)
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Making Reservations" icon="calendar-check" href="/guides/making-reservations">
+    Book a stay before writing a review
+  </Card>
+  
+  <Card title="Authentication" icon="lock" href="/guides/authentication">
+    Log in to submit reviews
+  </Card>
+  
+  <Card title="Browsing Housing" icon="hotel" href="/guides/browsing-housing">
+    Find properties to review
+  </Card>
+  
+  <Card title="User Roles" icon="users" href="/guides/user-roles">
+    Understand admin review management permissions
+  </Card>
+</CardGroup>
