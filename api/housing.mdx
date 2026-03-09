@@ -502,7 +502,48 @@ const tags = await response.json();
 
 ## Housing Images
 
-For managing housing images (upload, retrieve, delete), see the [Housing Images Management](/api/housing-images) documentation.
+### Get Housing Image
+
+Retrieve the image for a specific housing listing.
+
+**Endpoint**: `GET /v1/api/houses/{id}/image`
+
+**Authentication**: JWT required
+
+<ParamField path="id" type="integer" required>
+  Housing ID (code)
+</ParamField>
+
+**Response**: Returns the image as `image/jpeg`
+
+**Example**:
+
+```bash
+curl -X GET https://localhost:8443/v1/api/houses/1/image \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN"
+```
+
+### Upload Housing Image
+
+Upload or update the image for a housing listing.
+
+**Endpoint**: `PUT /v1/api/houses/{id}/image`
+
+**Authentication**: JWT required (Admin only)
+
+<ParamField path="id" type="integer" required>
+  Housing ID (code)
+</ParamField>
+
+**Request Body**: Multipart form data with the image file
+
+**Example**:
+
+```bash
+curl -X PUT https://localhost:8443/v1/api/houses/1/image \
+  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
+  -F "image=@/path/to/image.jpg"
+```
 
 ## Common Tag IDs
 
